@@ -459,6 +459,16 @@ export const chat = {
     en: "This file was deleted from the machine",
   },
   "chat.stella.working": { ja: "作業中…", en: "Working…" },
+  "chat.stella.activity.thinking": { ja: "考え中…", en: "Thinking…" },
+  "chat.stella.activity.browsing": {
+    ja: "画面を確認中…",
+    en: "Checking the screen…",
+  },
+  "chat.stella.activity.searching": { ja: "検索中…", en: "Searching…" },
+  "chat.stella.activity.files": {
+    ja: "ファイルを確認中…",
+    en: "Checking files…",
+  },
   /** The second line of an agent's row: what the conversation last said.
    * Words are shown as they are; a message that carried no words is
    * described, because "3 files" is a caption rather than something the user

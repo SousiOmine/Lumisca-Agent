@@ -221,12 +221,24 @@ export interface StellaConversationSnapshot {
  * text as it streams (agent/run-events.ts), because a stella client never
  * receives that text; the finished `entry` carries the whole card as one of
  * its segments and replaces what was drawn from the fragments. */
+/** High-level phase shown beside the typing dots while a run is active.
+ * Deliberately coarse so the conversation never leaks tool names or logs. */
+export type StellaActivity =
+  | "thinking"
+  | "working"
+  | "browsing"
+  | "searching"
+  | "files";
+
 export type StellaEvent =
   | { type: "agent_start" }
   /** The run ended. `silent` marks a routine's run that said nothing and was
    * removed from the conversation: the run is over, but there is nothing to
    * notify (see ClientEvent's `agent_end`). */
   | { type: "agent_end"; silent?: boolean }
+  /** Coarse phase of an active run, derived from tool traffic without
+   * exposing tool names or arguments. */
+  | { type: "activity"; activity: StellaActivity }
   /** One finished message (a prompt, or what the agent sent). */
   | { type: "entry"; entry: StellaEntry }
   /** A fragment of an app card being written into a reply: the JSON appended

@@ -38,6 +38,7 @@
 import type { ClientEvent, MessageIdentity } from "../domain/event.ts";
 import type { AgentMessage, ToolResultMessage } from "../domain/message.ts";
 import type {
+  StellaActivity,
   StellaEntry,
   StellaEntryIdentity,
   StellaEnvRequest,
@@ -388,6 +389,32 @@ function envRequestOf(
  * The event's `sessionId` is dropped: a conversation stream is bound to one
  * conversation, so carrying the id would only invite clients to route it.
  */
+/** Map an internal tool name to a coarse, user-facing phase. Returns null for
+ * tools whose output is about to appear as a message itself. */
+function activityOfTool(toolName: string): StellaActivity | null {
+  if (toolName === TOOL_SEND_CHAT) return null;
+  if (
+    toolName.startsWith("vm_") ||
+    toolName.startsWith("browser_") ||
+    toolName === "computer"
+  ) {
+    return "browsing";
+  }
+  if (toolName === "web_search" || toolName === "web_fetch") {
+    return "searching";
+  }
+  if (
+    toolName === "read" ||
+    toolName === "write" ||
+    toolName === "edit" ||
+    toolName === "list_dir" ||
+    toolName === "pdf_read_pages"
+  ) {
+    return "files";
+  }
+  return "working";
+}
+
 export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
   switch (event.type) {
     case "agent_start":
@@ -399,6 +426,12 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
           ...(event.silent === true ? { silent: true } : {}),
         },
       ];
+    case "tool_start": {
+      const activity = activityOfTool(event.toolName);
+      return activity === null ? [] : [{ type: "activity", activity }];
+    }
+    case "tool_end":
+      return [{ type: "activity", activity: "thinking" }];
     case "message_start":
     case "message_end": {
       const entries = stellaEntriesOf(event.message);

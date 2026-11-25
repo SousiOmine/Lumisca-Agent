@@ -6,6 +6,7 @@ import {
 } from "./events.ts";
 import type {
   FolderShare,
+  StellaActivity,
   StellaConversationSnapshot,
   StellaEntry,
   StellaEntryIdentity,
@@ -45,6 +46,8 @@ export interface StellaConversationState {
    * conversation's beginning. */
   older: string | null;
   running: boolean;
+  /** Coarse phase of an active run, or null when idle. */
+  activity: StellaActivity | null;
   /** The app card being written into the reply right now, as far as it has
    * arrived, or null. The run has no streaming TEXT (a reply arrives whole),
    * but a card is presentation: drawing it while it is written reads as
@@ -110,6 +113,7 @@ export function stellaStateOf(
     // must not lose the reader's way back.
     older: merged.replaced ? snapshot.older : current!.older,
     running: snapshot.running,
+    activity: snapshot.running ? (current?.activity ?? "thinking") : null,
     // A snapshot is the finished conversation; a card being written belongs
     // to the run that is still going, and a reconnect picks the rest up from
     // the events that follow.
@@ -262,13 +266,26 @@ export function applyStellaEvent(
 ): StellaConversationState | null {
   switch (event.type) {
     case "agent_start":
-      return state.running && state.error === undefined && state.liveUi === null
+      return state.running &&
+        state.activity === "thinking" &&
+        state.error === undefined &&
+        state.liveUi === null
         ? null
-        : { ...state, running: true, error: undefined, liveUi: null };
+        : {
+            ...state,
+            running: true,
+            activity: "thinking",
+            error: undefined,
+            liveUi: null,
+          };
     case "agent_end":
-      return !state.running && state.liveUi === null
+      return !state.running && state.activity === null && state.liveUi === null
         ? null
-        : { ...state, running: false, liveUi: null };
+        : { ...state, running: false, activity: null, liveUi: null };
+    case "activity":
+      return state.activity === event.activity
+        ? null
+        : { ...state, activity: event.activity };
     case "ui_delta": {
       const json =
         state.liveUi?.toolCallId === event.toolCallId
@@ -325,7 +342,7 @@ export function applyStellaEvent(
         ? null
         : { ...state, shares: event.shares };
     case "error":
-      return { ...state, error: event.message, liveUi: null };
+      return { ...state, error: event.message, activity: null, liveUi: null };
   }
 }
 
@@ -490,6 +507,7 @@ export function emptyStellaState(agentName: string): StellaConversationState {
     entries: [],
     older: null,
     running: false,
+    activity: null,
     disabled: false,
     liveUi: null,
     questions: [],

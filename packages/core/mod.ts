@@ -75,6 +75,7 @@ export type { Api } from "./domain/model.ts";
 export type { SessionInfo } from "./domain/session.ts";
 export type { FolderShare, ShareHostInfo } from "./domain/share.ts";
 export type {
+  StellaActivity,
   StellaConversationSnapshot,
   StellaEntry,
   StellaEntryIdentity,

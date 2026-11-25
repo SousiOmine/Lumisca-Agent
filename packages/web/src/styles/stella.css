@@ -963,6 +963,12 @@
   animation-delay: 0.3s;
 }
 
+.stella-activity-label {
+  margin-left: 4px;
+  font-size: var(--type-12);
+  color: var(--text-faint);
+}
+
 /* The wait before the conversation's first entry. It is the transcript's
  * placeholder, so it sits where the messages will be rather than as a
  * separate panel: opening a conversation starts the machine, and an empty

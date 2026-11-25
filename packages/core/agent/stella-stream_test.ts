@@ -442,22 +442,62 @@ test("stellaEventsOf: a program's messages arrive as entries", () => {
   );
 });
 
-test("stellaEventsOf: the model's tool traffic stays out of the stream", () => {
-  const toolStart = stellaEventsOf({
+test("stellaEventsOf: tool traffic projects only to a coarse activity phase", () => {
+  const bashStart = stellaEventsOf({
     type: "tool_start",
     sessionId: "s",
     toolCallId: "t1",
     toolName: "bash",
     args: { command: "ls" },
   });
-  assertEquals(toolStart, []);
+  assertEquals(bashStart, [{ type: "activity", activity: "working" }]);
+  assertEquals(
+    stellaEventsOf({
+      type: "tool_start",
+      sessionId: "s",
+      toolCallId: "t2",
+      toolName: "vm_screenshot",
+      args: {},
+    }),
+    [{ type: "activity", activity: "browsing" }],
+  );
+  assertEquals(
+    stellaEventsOf({
+      type: "tool_start",
+      sessionId: "s",
+      toolCallId: "t3",
+      toolName: "web_search",
+      args: { query: "test" },
+    }),
+    [{ type: "activity", activity: "searching" }],
+  );
+  assertEquals(
+    stellaEventsOf({
+      type: "tool_start",
+      sessionId: "s",
+      toolCallId: "t4",
+      toolName: "read",
+      args: { path: "a.txt" },
+    }),
+    [{ type: "activity", activity: "files" }],
+  );
+  assertEquals(
+    stellaEventsOf({
+      type: "tool_start",
+      sessionId: "s",
+      toolCallId: "t5",
+      toolName: "send_chat",
+      args: { text: "hi" },
+    }),
+    [],
+  );
   const toolEnd = stellaEventsOf({
     type: "tool_end",
     sessionId: "s",
     toolCallId: "t1",
     toolName: "bash",
   });
-  assertEquals(toolEnd, []);
+  assertEquals(toolEnd, [{ type: "activity", activity: "thinking" }]);
 });
 
 test("stellaEventsOf: a failure reaches the conversation", () => {

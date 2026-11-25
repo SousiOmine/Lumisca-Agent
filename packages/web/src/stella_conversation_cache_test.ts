@@ -21,6 +21,7 @@ function state(agentName: string): StellaConversationState {
     entries: [],
     older: null,
     running: false,
+    activity: null,
     liveUi: null,
     questions: [],
     handover: null,

@@ -245,6 +245,7 @@ export function StellaTranscript({
             conversation.envRequest === null &&
             conversation.shareRequest?.kind !== "lend" && (
               <RunningIndicator
+                activity={conversation.activity}
                 avatar={
                   <AgentAvatar
                     agentId={author.id}

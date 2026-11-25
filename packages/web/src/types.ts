@@ -45,6 +45,7 @@ export type {
   SavedPrompt,
   SessionInfo,
   SkillInfo,
+  StellaActivity,
   StellaAgent,
   StellaAvailability,
   StellaConversationSnapshot,

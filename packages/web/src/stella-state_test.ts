@@ -65,6 +65,7 @@ test("stellaStateOf: a snapshot becomes the conversation", () => {
     // back through the history before it.
     older: "cursor-1",
     running: true,
+    activity: "thinking",
     liveUi: null,
     questions: [],
     handover: null,
