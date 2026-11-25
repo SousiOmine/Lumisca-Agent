@@ -32,6 +32,14 @@ function envOf(values: Record<string, string>): EnvReader {
   return () => values;
 }
 
+/** Assert the POSIX mode bits that keep a key file private. Windows has no
+ * such bits: the file lives under the user's profile, where its ACL already
+ * limits access, so there is nothing to assert there. */
+function assertOwnerOnly(path: string): void {
+  if (process.platform === "win32") return;
+  assertEquals(fsSync.statSync(path).mode & 0o777, 0o600);
+}
+
 /** A fresh settings directory for one test, removed on drop. */
 async function withSettingsDir(
   fn: (dir: string, path: string) => Promise<void>,
@@ -269,7 +277,7 @@ test("key resolution: an explicit file is created with mode 0600", async () => {
     );
     assertEquals(resolved.source, "key-file");
     assertEquals(fsSync.existsSync(path), true);
-    assertEquals(fsSync.statSync(path).mode & 0o777, 0o600);
+    assertOwnerOnly(path);
     assertEquals(fsSync.readFileSync(path, "utf8").trim().length > 0, true);
 
     const again = resolveMasterKey(dir, envOf({ [SECRET_KEY_FILE_ENV]: path }));
@@ -282,10 +290,7 @@ test("key resolution: the settings directory gets a key file on first use", asyn
     const resolved = resolveMasterKey(dir, envOf({}));
     assertEquals(resolved.source, "settings-key-file");
     assertEquals(resolved.location, join(dir, SECRET_KEY_FILENAME));
-    assertEquals(
-      fsSync.statSync(join(dir, SECRET_KEY_FILENAME)).mode & 0o777,
-      0o600,
-    );
+    assertOwnerOnly(join(dir, SECRET_KEY_FILENAME));
 
     const again = resolveMasterKey(dir, envOf({}));
     assertEquals([...again.key], [...resolved.key]);
