@@ -282,6 +282,22 @@ export function App({ initialData }: AppProps): ReactElement {
     (id: string) => tabClose.request(closeTargets("tab", tabs, id)),
     [tabClose, tabs],
   );
+  // Desktop code mode: Ctrl/Cmd+W closes the active session tab instead of
+  // closing the whole window. Left alone in plain browsers where Ctrl/Cmd+W
+  // belongs to the browser's own tab strip.
+  useEffect(() => {
+    if (!desktop || mode !== "code" || activeTab === null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
+        return;
+      }
+      if (event.key.toLowerCase() !== "w") return;
+      event.preventDefault();
+      closeTab(activeTab);
+    };
+    globalThis.addEventListener("keydown", onKeyDown);
+    return () => globalThis.removeEventListener("keydown", onKeyDown);
+  }, [desktop, mode, activeTab, closeTab]);
   const closeTabsToRight = useCallback(
     (id: string) => tabClose.request(closeTargets("toRight", tabs, id)),
     [tabClose, tabs],

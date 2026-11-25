@@ -4,6 +4,7 @@ import { useRef, useState } from "preact/hooks";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { usePopoverPlacement } from "../hooks/usePopoverPlacement.ts";
 import { useT } from "../i18n.ts";
+import { sendShortcutHint, useSendShortcut } from "../sendShortcut.ts";
 import type { ModelInfo, ThinkingLevel } from "../types.ts";
 import { type ComposerModel, ComposerModelBar } from "./ComposerModelBar.tsx";
 import {
@@ -67,6 +68,8 @@ export function ComposerFooter({
   submitDisabled?: boolean;
 }) {
   const t = useT();
+  const sendShortcut = useSendShortcut();
+  const submitTitle = `${submitLabel} (${sendShortcutHint(sendShortcut)})`;
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showCtx, setShowCtx] = useState(false);
   // The pickers close on outside click and Escape, like every other
@@ -146,7 +149,7 @@ export function ComposerFooter({
           onClick={onSubmit}
           disabled={submitDisabled}
           aria-label={submitIconOnly ? submitLabel : undefined}
-          title={submitIconOnly ? submitLabel : undefined}
+          title={submitTitle}
         >
           {SubmitIcon && <SubmitIcon size={14} />}
           {!submitIconOnly && submitLabel}

@@ -11,6 +11,7 @@ import { useAttachments } from "../hooks/useAttachments.ts";
 import { useAutoGrow } from "../hooks/useAutoGrow.ts";
 import { useComposerPalettes } from "../hooks/useComposerPalettes.ts";
 import { useT } from "../i18n.ts";
+import { useSendShortcut } from "../sendShortcut.ts";
 import type { SlashCommand, SlashCommandItem } from "../slashCommands.ts";
 import type {
   ModelInfo,
@@ -180,6 +181,7 @@ export function Composer({
   }, [autoFocus, visible]);
   /** Message lookup of the app language (the composer's own labels). */
   const t = useT();
+  const sendShortcut = useSendShortcut();
   // The two lists above the caret (an `@` path, a `/` command) and what a pick
   // does to the text (see hooks/useComposerPalettes).
   const palettes = useComposerPalettes({
@@ -271,14 +273,22 @@ export function Composer({
     // spec defines; `keyCode === 229` is what WebKit reports for the same
     // moment in some IMEs.
     if (e.isComposing || e.keyCode === 229) return;
-    // Ctrl+Enter sends; plain Enter inserts a newline (while the slash menu
-    // is open it consumes Enter/Tab to pick the active entry instead).
-    if (e.key === "Enter" && e.ctrlKey) {
+    // Let an open slash/mention palette consume Enter/Tab before checking
+    // whether Enter submits the draft.
+    if (palettes.handleKeyDown(e)) return;
+    const modEnter = e.key === "Enter" && (e.ctrlKey || e.metaKey);
+    const plainEnter =
+      sendShortcut === "enter" &&
+      e.key === "Enter" &&
+      !e.shiftKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey;
+    if (modEnter || plainEnter) {
       e.preventDefault();
       onSubmit();
       return;
     }
-    if (palettes.handleKeyDown(e)) return;
     onKeyDown?.(e);
   };
 

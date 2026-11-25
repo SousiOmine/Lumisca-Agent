@@ -65,7 +65,7 @@ function render(
       onImagesChange: () => {},
       files: [],
       onFilesChange: () => {},
-      onPrompt: () => {},
+      onPrompt: () => Promise.resolve(),
       onAbort: () => {},
       onEnableAgent: () => Promise.resolve(),
       onRewind: () => Promise.resolve(),

@@ -215,20 +215,26 @@ export function useAppNavigation({
     (key: string | null) => pushUrl(codeUrl(key)),
     [pushUrl],
   );
-  // Ctrl+T (the shortcut the app menu advertises): open the draft tab. Only
-  // code mode has tabs; stella's conversation is the whole surface. The
-  // handler is on the window because the shortcut must work from the
-  // composer as well as from a transcript.
+  // Global keyboard shortcuts: Ctrl/Cmd+T opens a new code-mode tab, and
+  // Ctrl/Cmd+, opens the settings dialog (or closes it if already open).
   useEffect(() => {
-    if (mode !== "code") return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key !== "t") return;
-      event.preventDefault();
-      goToTab(null);
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      if (event.key === "t" && mode === "code") {
+        event.preventDefault();
+        goToTab(null);
+      } else if (event.key === ",") {
+        event.preventDefault();
+        if (url.settings === null) {
+          pushUrl({ route: url.route, settings: { category: null } });
+        } else {
+          router.dismiss({ route: url.route, settings: null });
+        }
+      }
     };
     globalThis.addEventListener("keydown", onKeyDown);
     return () => globalThis.removeEventListener("keydown", onKeyDown);
-  }, [mode, goToTab]);
+  }, [mode, goToTab, url.route, url.settings, pushUrl, router]);
   // Back to the list. A pop, not a push: the list is the screen the reader
   // came from, so the back button and the browser's back are the same move —
   // and the same one the transition draws (screen-transition.ts). A list

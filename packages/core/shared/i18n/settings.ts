@@ -47,6 +47,18 @@ export const settings = {
     ja: "システム設定に連動",
     en: "Match system",
   },
+  "settings.appearance.sendShortcut.label": {
+    ja: "送信キー",
+    en: "Send shortcut",
+  },
+  "settings.appearance.sendShortcut.modEnter": {
+    ja: "Ctrl+Enterまたは⌘+Enter",
+    en: "Ctrl+Enter / ⌘+Enter",
+  },
+  "settings.appearance.sendShortcut.enter": {
+    ja: "Enterキー",
+    en: "Enter",
+  },
 
   // `settings.language.*` keys below are read by the general panel (the
   // language is a general preference, not a settings category of its own).

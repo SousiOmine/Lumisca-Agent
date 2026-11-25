@@ -1,5 +1,10 @@
 import type { MessageKey } from "@lumisca/core/shared";
 import { useT } from "../../i18n.ts";
+import {
+  type SendShortcut,
+  setSendShortcut,
+  useSendShortcut,
+} from "../../sendShortcut.ts";
 import type { ThemeSetting } from "../../types.ts";
 import { Select } from "../Select.tsx";
 import { SettingRow } from "../SettingRow.tsx";
@@ -19,6 +24,11 @@ export const THEME_OPTIONS: { value: ThemeSetting; label: MessageKey }[] = [
   { value: "system", label: "settings.appearance.theme.system" },
 ];
 
+const SEND_SHORTCUT_OPTIONS: { value: SendShortcut; label: MessageKey }[] = [
+  { value: "mod-enter", label: "settings.appearance.sendShortcut.modEnter" },
+  { value: "enter", label: "settings.appearance.sendShortcut.enter" },
+];
+
 /** The theme row of Settings → アプリ. Theme is applied to <html data-theme>
  * immediately and stored in this client's own storage, so it survives reloads
  * and does not follow the reader to another device. It shares the app page
@@ -31,6 +41,7 @@ export function AppearancePanel({
   onThemeChange,
 }: AppearancePanelProps) {
   const t = useT();
+  const sendShortcut = useSendShortcut();
   return (
     <div className="settings-pane">
       <SettingRow label={t("settings.appearance.theme.label")}>
@@ -42,6 +53,17 @@ export function AppearancePanel({
             label: t(option.label),
           }))}
           onChange={onThemeChange}
+        />
+      </SettingRow>
+      <SettingRow label={t("settings.appearance.sendShortcut.label")}>
+        <Select
+          label={t("settings.appearance.sendShortcut.label")}
+          value={sendShortcut}
+          options={SEND_SHORTCUT_OPTIONS.map((option) => ({
+            value: option.value,
+            label: t(option.label),
+          }))}
+          onChange={setSendShortcut}
         />
       </SettingRow>
     </div>

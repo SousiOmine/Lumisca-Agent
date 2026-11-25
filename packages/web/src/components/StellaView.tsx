@@ -1,5 +1,6 @@
 import { errorMessage } from "@lumisca/core/shared";
 import { IconFolderShare, IconSend } from "@tabler/icons-preact";
+import type { KeyboardEvent } from "preact/compat";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
   sessionAttachmentBase,
@@ -73,7 +74,7 @@ interface StellaViewProps {
     text: string,
     images: PendingImage[],
     files: PendingFile[],
-  ) => void;
+  ) => Promise<void>;
   onAbort: () => void;
   /** Switch an agent back on. The conversation draws this beside the
    * read-only notice in place of the composer: the row's menu is the other
@@ -156,6 +157,7 @@ export function StellaView({
   // The transcript owns the scroll element (see TranscriptScrollOptions.
   // pinToken): this view only records that a submit happened.
   const [pinToken, setPinToken] = useState(0);
+  const [sending, setSending] = useState(false);
   const visualBase = sessionVisualBase("", sessionId ?? "");
   const attachBase = sessionAttachmentBase("", sessionId ?? "");
   const uploadBase = stellaUploadBase(agent?.id ?? "");
@@ -225,6 +227,7 @@ export function StellaView({
     // An image alone is a prompt (the model can look at it and answer), the
     // same rule the server applies to the body it receives.
     if (
+      sending ||
       (text.length === 0 && images.length === 0 && files.length === 0) ||
       conversation === null
     ) {
@@ -233,11 +236,35 @@ export function StellaView({
     // A prompt names the server's id for each file, so sending before the
     // last transfer is done would send a prompt without that attachment.
     if (files.some((file) => file.status !== "done")) return;
-    onPrompt(text, images, files);
-    onInputChange("");
-    onImagesChange([]);
-    onFilesChange([]);
-    setPinToken((token) => token + 1);
+    // Keep the draft intact until the server accepts the prompt, matching
+    // ChatView.submit so a transient outage never discards an unsent message.
+    const pendingInput = input;
+    const pendingImages = images;
+    const pendingFiles = files;
+    setSending(true);
+    void (async () => {
+      try {
+        await onPrompt(text, pendingImages, pendingFiles);
+        onInputChange("");
+        onImagesChange([]);
+        onFilesChange([]);
+        setPinToken((token) => token + 1);
+      } catch {
+        onInputChange(pendingInput);
+        onImagesChange(pendingImages);
+        onFilesChange(pendingFiles);
+      } finally {
+        setSending(false);
+      }
+    })();
+  };
+
+  const onComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Escape" && isRunning) {
+      e.preventDefault();
+      onAbort();
+    }
   };
 
   /** A rewind refills the composer with the message's text, so a corrected
@@ -263,7 +290,12 @@ export function StellaView({
         ) : conversation === null ? (
           <div className="chat-scroll">
             <div className="chat-column">
-              {loading && <LoadingSkeleton label={t("chat.stella.loading")} />}
+              {loading && (
+                <LoadingSkeleton
+                  label={t("chat.stella.loading")}
+                  className="stella-loading"
+                />
+              )}
               {/* The first-run build is the one wait this mode cannot
                * hide. It lives here rather than in the title bar: it is
                * a sentence, and the title bar is one line of a name. */}
@@ -303,7 +335,13 @@ export function StellaView({
             // rewrite a transcript the server refuses to open, and a card's
             // answer would be a message nobody can send.
             onRewind={disabled ? undefined : handleRewind}
-            onSend={disabled ? undefined : (text) => onPrompt(text, [], [])}
+            onSend={
+              disabled
+                ? undefined
+                : (text) => {
+                    void onPrompt(text, [], []).catch(() => {});
+                  }
+            }
             onProvideEnv={onProvideEnv}
             onDeclineEnv={onDeclineEnv}
             onPickShare={() => setShareDialogOpen(true)}
@@ -376,6 +414,7 @@ export function StellaView({
             <Composer
               value={input}
               onChange={onInputChange}
+              onKeyDown={onComposerKeyDown}
               placeholder={
                 agent === null
                   ? t("chat.stella.noAgent")
@@ -397,6 +436,7 @@ export function StellaView({
               // created once an agent is picked and the machine runs), so the
               // button says so instead of accepting a prompt that goes nowhere.
               submitDisabled={
+                sending ||
                 (!input.trim() && images.length === 0 && files.length === 0) ||
                 conversation === null ||
                 files.some((file) => file.status !== "done")
