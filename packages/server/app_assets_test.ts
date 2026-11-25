@@ -480,3 +480,21 @@ test("the PWA surface is installable and never secret", async () => {
   assertEquals(html.includes('rel="manifest"'), true);
   assertEquals(html.includes("/pwa/apple-touch-icon.png"), true);
 });
+
+test("the math fonts the stylesheet names are served", async () => {
+  // A formula's faces are fetched by the browser itself, as the inlined
+  // stylesheet asks for them; the name is the stylesheet's, and anything
+  // else is not this build's file.
+  const { base } = readOnlyServer();
+  const font = await fetch(`${base}/assets/KaTeX_Main-Regular.woff2`);
+  assertEquals(font.status, 200);
+  assertEquals(font.headers.get("content-type"), "font/woff2");
+  assertEquals((await font.arrayBuffer()).byteLength > 1000, true);
+  const etag = font.headers.get("etag");
+  assert(etag !== null, "a font must carry a validator");
+  const revalidated = await fetch(`${base}/assets/KaTeX_Main-Regular.woff2`, {
+    headers: { "if-none-match": etag },
+  });
+  assertEquals(revalidated.status, 304);
+  assertEquals((await fetch(`${base}/assets/KaTeX_Missing.woff2`)).status, 404);
+});

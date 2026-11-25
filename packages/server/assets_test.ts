@@ -3,9 +3,14 @@ import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { join, join as pathJoin } from "node:path";
 import { removeDirRetry } from "@lumisca/core/test-utils";
-import { assertEquals, assertRejects } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { contentEtag } from "./app-file-headers.ts";
-import { Assets, type AssetsManifest, bundleStylesCss } from "./assets.ts";
+import {
+  Assets,
+  type AssetsManifest,
+  bundleStyles,
+  bundleStylesCss,
+} from "./assets.ts";
 
 test("packaged assets use the startup-captured manifest path", async () => {
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-"));
@@ -23,6 +28,7 @@ test("packaged assets use the startup-captured manifest path", async () => {
     "styles.css": "body { color: white; }",
     "favicon.png": btoa(String.fromCharCode(...favicon)),
     pwaIcons: { "icon-192.png": btoa(String.fromCharCode(...icon)) },
+    fonts: {},
     "sw.js": worker,
   };
   await fsp.writeFile(manifestPath, JSON.stringify(manifest));
@@ -134,6 +140,63 @@ test("bundleStylesCss rejects stray rules and escapes", async () => {
       "a.css": ".a { color: red; }\n",
     });
     await assertRejects(() => bundleStylesCss(escaping), Error);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+test("a dependency's stylesheet is inlined with its fonts reported", async () => {
+  const styles = await bundleStyles(
+    join(process.cwd(), "packages", "web", "src", "styles.css"),
+  );
+  // KaTeX's rules arrive whole, with the font URLs pointed at the route the
+  // server answers from.
+  assertEquals(styles.css.includes(".katex-display"), true);
+  assertEquals(
+    styles.css.includes("url(/assets/KaTeX_Main-Regular.woff2)"),
+    true,
+  );
+  // The sources this build does not ship are gone: the browser would ask for
+  // a .woff or .ttf after the woff2 it already has.
+  assertEquals(/url\(["']?fonts\//.test(styles.css), false);
+  const path = styles.fonts.get("KaTeX_Main-Regular.woff2");
+  assert(path !== undefined, "the font file must be reported");
+  assertEquals((await fsp.stat(path)).size > 1000, true);
+  assertEquals(styles.fonts.size >= 10, true);
+});
+
+test("the fonts are read from the checkout, or from the manifest", async () => {
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-"));
+  const font = new Uint8Array([0x77, 0x4f, 0x46, 0x32, 1, 2, 3]);
+  const manifestPath = join(root, "assets.json");
+  try {
+    // A checkout: the stylesheet names the files beside the dependency, so a
+    // name it does not use is not a file.
+    const checkout = new Assets(process.cwd(), join(root, "cache"));
+    const bytes = await checkout.getFont("KaTeX_Main-Regular.woff2");
+    assertEquals((bytes?.byteLength ?? 0) > 1000, true);
+    assertEquals(await checkout.getFont("KaTeX_Missing.woff2"), undefined);
+    assertEquals(await checkout.getFont("../../etc/passwd"), undefined);
+    assertEquals(await checkout.getFont("constructor"), undefined);
+
+    // A packaged build: the manifest carries the bytes encoded, and it is
+    // the whole authority (no repository layout to read fonts from).
+    await fsp.writeFile(
+      manifestPath,
+      JSON.stringify({
+        client: {},
+        "styles.css": "",
+        "favicon.png": "",
+        pwaIcons: {},
+        fonts: {
+          "KaTeX_Main-Regular.woff2": btoa(String.fromCharCode(...font)),
+        },
+        "sw.js": "",
+      }),
+    );
+    const packaged = new Assets(root, join(root, "cache"), manifestPath);
+    assertEquals(await packaged.getFont("KaTeX_Main-Regular.woff2"), font);
+    assertEquals(await packaged.getFont("KaTeX_Missing.woff2"), undefined);
   } finally {
     await removeDirRetry(root);
   }

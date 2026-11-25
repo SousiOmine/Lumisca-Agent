@@ -5,6 +5,7 @@ import {
 } from "@lumisca/core/shared";
 import { Marked, Renderer, type RendererObject, type Tokens } from "marked";
 import { withToken } from "./api-client.ts";
+import { markedMath } from "./math.ts";
 
 function escapeHtml(text: string): string {
   return text
@@ -183,7 +184,13 @@ function markedFor(options: MarkdownOptions): Marked {
   ) {
     return last.marked;
   }
-  const marked = new Marked({ renderer: rendererFor(options) });
+  const marked = new Marked({
+    renderer: rendererFor(options),
+    // LaTeX in the model's text is typeset while the text is lexed (see
+    // math.ts): by the time the HTML exists, "_" and "*" inside a formula
+    // would already be emphasis.
+    ...markedMath,
+  });
   last = { visualBase: options.visualBase, t: options.t, marked };
   return marked;
 }

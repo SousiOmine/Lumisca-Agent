@@ -179,6 +179,8 @@ function respond(context: StreamRequest): AssistantMessage {
   }
   return fauxAssistantMessage(
     "## デモ応答\n\nこれはマークダウンのテストです:\n\n" +
+      "質量とエネルギーの関係は $E = mc^2$ です。\n\n" +
+      "$$\n\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}\n$$\n\n" +
       "```ts\nconst x = 1;\n```\n\n" +
       "- 項目A\n- 項目B\n\n" +
       "[Lumisca](https://github.com/SousiOmine/Lumisca-Agent) と " +

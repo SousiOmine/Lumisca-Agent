@@ -1,5 +1,6 @@
 import * as fsSync from "node:fs";
 import * as fsp from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { contentEtag } from "./app-file-headers.ts";
@@ -41,18 +42,35 @@ export interface AssetsManifest {
   /** The PWA icons, keyed by the name their `/pwa/*` URL carries. Base64 for
    * the same reason as the favicon: the manifest is text. */
   pwaIcons: Record<string, string>;
+  /** The font files the stylesheet references, keyed by the name its
+   * `/assets/*` URL carries (KaTeX's math fonts today). Base64: fonts are
+   * binary, and the manifest is text. */
+  fonts: Record<string, string>;
   /** The service worker script, served at `/sw.js`. A worker has to be
    * fetched from the server on every update check, so it travels with the
    * build rather than being generated from a template in the binary. */
   "sw.js": string;
 }
 
+/** One stylesheet with the font files it needs to be legible. */
+export interface StyleBundle {
+  /** The stylesheet, every `@import` inlined and every font URL pointed at
+   * the `/assets/*` route. */
+  css: string;
+  /** The font files the stylesheet references: the path of the file on disk
+   * by the name its `/assets/*` URL carries. */
+  fonts: Map<string, string>;
+}
+
 /** Resolve the styles entry (`styles.css`) into a single stylesheet.
- * The entry is a manifest of relative `@import "./styles/<part>.css";`
- * lines (see `packages/web/src/styles/README.md`); the imports are inlined
- * in order so the cascade matches what the dev bundle serves. A plain
- * stylesheet without imports is returned as-is (backwards compatible). */
-export async function bundleStylesCss(entryPath: string): Promise<string> {
+ * The entry is a manifest of `@import` lines (see
+ * `packages/web/src/styles/README.md`); the imports are inlined in order so
+ * the cascade matches what the dev bundle serves. An import either names a
+ * file next to the entry (`"./styles/chat.css"`) or a stylesheet inside a
+ * dependency (`"katex/dist/katex.min.css"`); a dependency's own font files
+ * are reported so the caller can ship them (see `fonts`). A plain stylesheet
+ * without imports is returned as-is (backwards compatible). */
+export async function bundleStyles(entryPath: string): Promise<StyleBundle> {
   const entry = await fsp.readFile(entryPath, "utf8");
   const importPattern = /@import\s+"([^"]+)";/g;
   const parts: string[] = [];
@@ -61,21 +79,28 @@ export async function bundleStylesCss(entryPath: string): Promise<string> {
     const rel = match[1];
     if (rel !== undefined) parts.push(rel);
   }
-  if (parts.length === 0) return entry;
+  if (parts.length === 0) return { css: entry, fonts: new Map() };
   const rest = entry
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(importPattern, "")
     .trim();
   if (rest !== "") {
     throw new Error(
-      `${entryPath}: only comments and relative @import lines are allowed`,
+      `${entryPath}: only comments and @import lines are allowed`,
     );
   }
   const dir = dirname(entryPath);
+  const fonts = new Map<string, string>();
   const bodies = await Promise.all(
     parts.map(async (rel) => {
       if (!rel.endsWith(".css")) {
         throw new Error(`${entryPath}: non-css import is not allowed: ${rel}`);
+      }
+      if (!rel.startsWith(".")) {
+        // A dependency's stylesheet (KaTeX's). Its `url(fonts/…)` entries
+        // name its own files, which this build ships beside the served
+        // stylesheet.
+        return await dependencyStyles(entryPath, rel, fonts);
       }
       // join() normalizes `..`; anything left pointing outside the web
       // sources is rejected instead of read.
@@ -86,7 +111,52 @@ export async function bundleStylesCss(entryPath: string): Promise<string> {
       return await fsp.readFile(resolved, "utf8");
     }),
   );
-  return bodies.join("\n");
+  return { css: bodies.join("\n"), fonts };
+}
+
+/** The stylesheet of one dependency, with its font URLs rewritten to the
+ * names this server serves.
+ *
+ * The files it points at are the package's own (`dist/fonts/*`), resolved
+ * relative to the stylesheet rather than by name, so a package that moves
+ * them fails at build time instead of in the browser. Only the `woff2`
+ * source is kept: the `woff` and `ttf` alternates of the same face are not
+ * shipped, and a browser asking for one after the `woff2` would only get a
+ * 404. */
+async function dependencyStyles(
+  entryPath: string,
+  specifier: string,
+  fonts: Map<string, string>,
+): Promise<string> {
+  let file: string;
+  try {
+    file = createRequire(import.meta.url).resolve(specifier);
+  } catch {
+    throw new Error(`${entryPath}: cannot resolve ${specifier}`);
+  }
+  const css = await fsp.readFile(file, "utf8");
+  const dir = join(dirname(file), "fonts");
+  return css
+    .replace(/,\s*url\((["']?)fonts\/[^)"']+\.woff\1\)\s*format\("woff"\)/g, "")
+    .replace(
+      /,\s*url\((["']?)fonts\/[^)"']+\.ttf\1\)\s*format\("truetype"\)/g,
+      "",
+    )
+    .replace(
+      /url\((["']?)fonts\/([^)"']+\.woff2)\1\)/g,
+      (_match, _quote: string, name: string) => {
+        if (!/^[A-Za-z0-9_.-]+$/.test(name)) {
+          throw new Error(`${file}: unexpected font file name: ${name}`);
+        }
+        fonts.set(name, join(dir, name));
+        return `url(/assets/${name})`;
+      },
+    );
+}
+
+/** The stylesheet alone, for callers that do not ship its fonts. */
+export async function bundleStylesCss(entryPath: string): Promise<string> {
+  return (await bundleStyles(entryPath)).css;
 }
 
 /** Bundle the client into `outdir` and read every file the build wrote. The
@@ -146,7 +216,11 @@ export async function buildAssetsManifest(
   const outdir = await fsp.mkdtemp(join(osTmpdir(), "lumisca-client-"));
   try {
     const client = await bundleClientFiles(repoRoot, outdir);
-    const css = await bundleStylesCss(webStylesPath(repoRoot));
+    const styles = await bundleStyles(webStylesPath(repoRoot));
+    const fonts: Record<string, string> = {};
+    for (const [name, path] of styles.fonts) {
+      fonts[name] = base64Of(await fsp.readFile(path));
+    }
     const favicon = base64Of(await fsp.readFile(webFaviconPath(repoRoot)));
     const pwaIcons: Record<string, string> = {};
     for (const name of PWA_ICON_FILES) {
@@ -161,9 +235,10 @@ export async function buildAssetsManifest(
     return {
       manifest: {
         client,
-        "styles.css": css,
+        "styles.css": styles.css,
         "favicon.png": favicon,
         pwaIcons,
+        fonts,
         "sw.js": serviceWorker,
       },
       clientBytes: clientBytesOf(client),
@@ -183,9 +258,10 @@ export class Assets {
   // A single memoized promise: a resolved promise keeps returning the same
   // value, and a failed build nulls the slot so the next request retries.
   private clientPromise: Promise<Record<string, AssetFile>> | null = null;
-  private cssCache: string | null = null;
+  private stylesCache: StyleBundle | null = null;
   private faviconCache: Uint8Array | null = null;
   private readonly pwaIconCache = new Map<string, Uint8Array>();
+  private readonly fontCache = new Map<string, Uint8Array>();
   private serviceWorkerCache: string | null = null;
   /** Memoized embedded manifest (undefined = not read yet, or the last read
    * failed and the next request may try again). */
@@ -206,7 +282,8 @@ export class Assets {
   invalidate(): void {
     this.clientPromise = null;
     this.buildIdCache = null;
-    this.cssCache = null;
+    this.stylesCache = null;
+    this.fontCache.clear();
   }
 
   /** Packaged builds (a compiled binary, no repository layout) serve the
@@ -314,20 +391,61 @@ export class Assets {
     );
   }
 
-  async getCss(): Promise<string> {
-    if (this.cssCache === null) {
-      this.cssCache = await this.source(
-        () => bundleStylesCss(webStylesPath(this.repoRoot)),
-        (manifest) => manifest["styles.css"],
+  /** The stylesheet and the font files it points at. In a checkout the fonts
+   * are files beside the dependency whose stylesheet was inlined; a packaged
+   * build carries their bytes in the manifest (see getFont). */
+  private async getStyles(): Promise<StyleBundle> {
+    if (this.stylesCache === null) {
+      this.stylesCache = await this.source(
+        () => bundleStyles(webStylesPath(this.repoRoot)),
+        (manifest) => ({ css: manifest["styles.css"], fonts: new Map() }),
         "styles.css not found and no embedded assets",
       ).catch((error) => {
         // A failed build must not poison the cache: the next request
         // retries (same rule as the client bundle).
-        this.cssCache = null;
+        this.stylesCache = null;
         throw error;
       });
     }
-    return this.cssCache;
+    return this.stylesCache;
+  }
+
+  async getCss(): Promise<string> {
+    return (await this.getStyles()).css;
+  }
+
+  /** One font file the stylesheet references, by the name its `/assets/*`
+   * URL carries, or undefined when this build has no such file.
+   *
+   * The stylesheet is the authority: in a checkout its rewritten `url()`
+   * entries name the files, and a packaged build carries the same names with
+   * the bytes encoded in the manifest. A name the stylesheet does not use
+   * therefore never reaches the file system. */
+  async getFont(name: string): Promise<Uint8Array | undefined> {
+    const cached = this.fontCache.get(name);
+    if (cached !== undefined) return cached;
+    const bytes = this.hasWebSources()
+      ? await this.fontFromCheckout(name)
+      : this.fontFromManifest(name);
+    if (bytes === undefined) return undefined;
+    this.fontCache.set(name, bytes);
+    return bytes;
+  }
+
+  private async fontFromCheckout(
+    name: string,
+  ): Promise<Uint8Array | undefined> {
+    const path = (await this.getStyles()).fonts.get(name);
+    return path === undefined ? undefined : await fsp.readFile(path);
+  }
+
+  private fontFromManifest(name: string): Uint8Array | undefined {
+    const fonts = this.embedded()?.fonts;
+    if (fonts === undefined || !Object.hasOwn(fonts, name)) return undefined;
+    const encoded = fonts[name];
+    return encoded === undefined
+      ? undefined
+      : Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
   }
 
   async getFavicon(): Promise<Uint8Array> {

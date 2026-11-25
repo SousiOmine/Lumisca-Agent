@@ -6,10 +6,15 @@
 
 @import "./styles/tokens.css";
 @import "./styles/base.css";
+/* The typesetter's own rules, before ours so styles/math.css can adjust
+ * them. Its fonts are served from /assets, where the build's stylesheet
+ * bundler points them (see packages/server/assets.ts). */
+@import "katex/dist/katex.min.css";
 @import "./styles/motion.css";
 @import "./styles/layout.css";
 @import "./styles/chrome.css";
 @import "./styles/chat.css";
+@import "./styles/math.css";
 @import "./styles/ui-app.css";
 @import "./styles/stella.css";
 @import "./styles/side-panels.css";

@@ -143,6 +143,7 @@ async function stageDesktopFrontend(
   manifest: {
     client: Record<string, { body: string }>;
     "styles.css": string;
+    fonts: Record<string, string>;
   },
 ): Promise<void> {
   const assets = join(frontendDir, "assets");
@@ -152,6 +153,11 @@ async function stageDesktopFrontend(
     await fsp.writeFile(join(assets, name), file.body);
   }
   await fsp.writeFile(join(assets, "styles.css"), manifest["styles.css"]);
+  // The faces the stylesheet points at, as the files its `url()` entries
+  // name: Tauri serves this directory as the app's own origin.
+  for (const [name, encoded] of Object.entries(manifest.fonts)) {
+    await fsp.writeFile(join(assets, name), Buffer.from(encoded, "base64"));
+  }
   await fsp.writeFile(join(frontendDir, "index.html"), renderDesktopDocument());
   console.log(`Desktop UI: ${frontendDir}`);
 }

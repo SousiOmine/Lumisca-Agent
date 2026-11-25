@@ -228,3 +228,61 @@ test("tables are wrapped for horizontal scrolling", () => {
   assertEquals(html.includes('<div class="md-table-wrap"><table>'), true);
   assertEquals(html.includes("</table></div>"), true);
 });
+
+test("math is typeset, inline and on its own line", () => {
+  // The model writes formulas the way a paper does. Each delimiter pair has
+  // to reach the typesetter as source, not as markup: "_" and "*" inside a
+  // formula are TeX, and markdown must not turn them into emphasis first.
+  const inline = render("mass $E=mc^2$ here");
+  assertEquals(inline.includes('class="katex"'), true);
+  assertEquals(inline.includes("<em>"), false);
+  const display = render("$$\n\\sum_{i=1}^{n} i^2\n$$");
+  assertEquals(display.includes("katex-display"), true);
+  assertEquals(display.includes('class="math-block"'), true);
+  // The LaTeX spellings of the same two forms.
+  assertEquals(render("\\(a_1\\)").includes('class="katex"'), true);
+  assertEquals(render("\\[\na_1\n\\]").includes("katex-display"), true);
+  // A formula on its own line ends the paragraph it followed.
+  const mixed = render("text\n$$\nx=1\n$$\nmore text");
+  assertEquals(mixed.includes("<p>text</p>"), true);
+  assertEquals(mixed.includes("<p>more text</p>"), true);
+});
+
+test("dollars that are money stay text", () => {
+  // "$5 and $10" is prose: the single-$ rule opens only before a non-space
+  // and closes only after one, so a price is never typeset as math.
+  const html = render("prices are $5 and $10 today");
+  assertEquals(html.includes("katex"), false);
+  assertEquals(html.includes("$5 and $10"), true);
+  // An escaped dollar is a literal one in both spellings.
+  assertEquals(render("\\$5 off").includes("$5 off"), true);
+});
+
+test("math inside code is left alone", () => {
+  // A code span or fence is what the model quoted, not something to typeset.
+  const span = render("see `$x$` here");
+  assertEquals(span.includes("<code>$x$</code>"), true);
+  assertEquals(span.includes("katex"), false);
+  const fence = render("```\n$$x$$\n```");
+  assertEquals(fence.includes("$$x$$"), true);
+  assertEquals(fence.includes("katex"), false);
+});
+
+test("a formula the typesetter cannot parse shows its source", () => {
+  // KaTeX reports the failure in its own error style instead of dropping the
+  // text: the reader still sees what the model wrote.
+  const html = render("bad $\\frac{1}$ ok");
+  assertEquals(html.includes("katex-error"), true);
+  assertEquals(html.includes("\\frac{1}"), true);
+});
+
+test("environments the typesetter does not know are renamed", () => {
+  // A paper writes \begin{align}; KaTeX knows only \begin{aligned}. The
+  // rename keeps the rows and the alignment markers, so the formula renders
+  // instead of showing up as an error.
+  const html = render(
+    "$$\n\\begin{align}\na &= b \\\\ c &= d\n\\end{align}\n$$",
+  );
+  assertEquals(html.includes("katex-error"), false);
+  assertEquals(html.includes("katex-display"), true);
+});

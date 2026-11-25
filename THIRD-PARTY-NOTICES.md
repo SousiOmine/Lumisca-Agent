@@ -15,3 +15,10 @@ Lumisca-Agent の配布物に含まれるサードパーティ製ファイルと
 
 - **ライセンス**: Unicode License Agreement — Data Files and Software（上記 URL の条件が適用されます）。無改変でコピーし、埋め込みの著作権表示を保持しています。
 - **ラッパーのライセンス**: `@napi-rs/canvas` のバインディング部分は MIT License（Copyright (c) 2020 lynweklm@gmail.com）です。
+
+## 数式フォント KaTeX
+
+- **出所**: npm パッケージ `katex` の `dist/fonts/*.woff2` を無改変で配布物に含めます。ビルド時にサーバーのアセットへ配置します。配置先は `assets.json` とデスクトップ版の `assets/` です。返信の数式を組むスタイルシートがこのファイルを参照します。
+- **内容**: KaTeX が数式を組むための書体です。`packages/server/assets.ts` が `katex/dist/katex.min.css` の `url()` を `/assets/<名前>` へ書き換え、参照されたファイルをそのまま同梱します。スタイルシートそのものは `url()` の書き換え、`woff` と `ttf` の代替指定の削除、圧縮だけを行って同梱します。
+- **著作権表示**: `Copyright (c) 2013-2020 Khan Academy and other contributors`
+- **ライセンス**: MIT License

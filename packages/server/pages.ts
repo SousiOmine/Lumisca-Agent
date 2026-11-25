@@ -139,14 +139,17 @@ export function registerPages(
     return c.body(body, 200, headers);
   };
 
-  /** Answer a PNG with a validator, or 304 when the client already has it.
-   * The favicon and the PWA icons share this: all are on the token-free
-   * list (a browser may ask for them on any page, and the install pipeline
-   * asks without a cookie), and all change only with a release. */
-  const servePng = (c: Context, png: Uint8Array): Response => {
-    const etag = bytesEtag(png);
+  /** Answer a binary asset with a validator, or 304 when the client already
+   * has it. The favicon, the PWA icons and the math fonts share this: all
+   * change only with a release, and the bytes come from the bundle. */
+  const serveBytes = (
+    c: Context,
+    bytes: Uint8Array,
+    contentType: string,
+  ): Response => {
+    const etag = bytesEtag(bytes);
     const headers = {
-      "content-type": "image/png",
+      "content-type": contentType,
       ...appFileHeaders("revalidate", etag),
     };
     if (etagMatches(c.req.header("if-none-match"), etag)) {
@@ -157,11 +160,17 @@ export function registerPages(
     // `c.body` wants a body whose buffer is an ArrayBuffer; the bytes
     // come from the bundle and are copied exactly as they are.
     return c.newResponse(
-      new Uint8Array(png).buffer as ArrayBuffer,
+      new Uint8Array(bytes).buffer as ArrayBuffer,
       200,
       headers,
     );
   };
+
+  /** A PNG, from the same helper. The favicon and the PWA icons are on the
+   * token-free list (a browser may ask for them on any page, and the install
+   * pipeline asks without a cookie), so this never carries a secret. */
+  const servePng = (c: Context, png: Uint8Array): Response =>
+    serveBytes(c, png, "image/png");
 
   /** The client build: the entry chunk the page loads (`app.js`) and the
    * chunks its dynamic imports fetch later (`@novnc/novnc` for the stella
@@ -169,9 +178,18 @@ export function registerPages(
    * joined to a path, so a path-like or stale name is simply not this
    * build's file. */
   app.get("/assets/:file", async (c) => {
+    const name = c.req.param("file");
+    // The math fonts the inlined stylesheet points at (KaTeX's faces). The
+    // browser fetches one only when a formula uses that face, and the
+    // stylesheet names them, so an unknown name is not a file either.
+    if (name.endsWith(".woff2")) {
+      const font = await assets.getFont(name);
+      if (font === undefined) return c.text("Not found", 404);
+      return serveBytes(c, font, "font/woff2");
+    }
     let file: AssetFile | undefined;
     try {
-      file = await assets.getClientFile(c.req.param("file"));
+      file = await assets.getClientFile(name);
     } catch (error) {
       return c.text(`Client bundle build failed: ${errorMessage(error)}`, 500);
     }

@@ -1,0 +1,42 @@
+/* LaTeX in messages.
+ *
+ * The typesetter's own stylesheet (KaTeX) is imported by ../styles.css; this
+ * file only adjusts how a formula sits in a message. The formulas themselves
+ * are produced by ../../web/src/math.ts. */
+
+/* A formula is part of the sentence: it must not break the line apart, and
+ * a long one scrolls instead of widening the message column. */
+.math-block {
+  display: block;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  padding: 2px 0 6px;
+}
+
+/* One line of a display formula is laid out by the typesetter as
+ * `white-space: nowrap`, so the scroll above is what lets the reader see the
+ * rest of it; the block keeps its own spacing instead of inheriting the
+ * paragraph's bottom margin. */
+.math-block > .katex-display {
+  margin: 4px 0;
+}
+
+/* In running text the formula follows the body size and is never a line
+ * taller than the text around it unless it has to be (a fraction, a big
+ * operator). */
+.msg-body .katex {
+  font-size: 1.05em;
+}
+
+/* The source of a formula the typesetter could not take, or one too long to
+ * typeset: shown as code so it stays readable and selectable. */
+.math-source {
+  margin: 6px 0;
+  overflow-x: auto;
+  font-size: var(--type-13);
+}
+
+.math-source code {
+  white-space: pre;
+}
