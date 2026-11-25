@@ -633,6 +633,57 @@ a.msg-attachment-file.checking {
   margin: 8px 0;
 }
 
+.md-code-block {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.md-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 4px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.md-code-lang {
+  font-family: var(--mono);
+  font-size: var(--type-11);
+  color: var(--text-faint);
+  user-select: none;
+}
+
+.md-code-copy {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--type-11-5);
+  color: var(--text-dim);
+  transition:
+    background var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.md-code-copy:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.md-code-copy[data-copied="true"] {
+  color: var(--ok);
+}
+
+.msg-body .md-code-block pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .msg-body code {
   font-family: var(--mono);
   font-size: var(--type-12-5);
@@ -679,13 +730,18 @@ a.msg-attachment-file.checking {
   font-size: var(--type-14);
 }
 
+/* Links stay achromatic, so a quiet underline is what separates them from
+ * surrounding prose at rest and on touch screens where hover does not exist. */
 .markdown a {
   color: var(--accent);
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
 
 .markdown a:hover {
-  text-decoration: underline;
+  text-decoration-color: var(--text);
 }
 
 .markdown blockquote {
@@ -696,10 +752,20 @@ a.msg-attachment-file.checking {
   color: var(--text-dim);
 }
 
+.md-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 8px 0;
+}
+
 .markdown table {
   border-collapse: collapse;
   margin: 8px 0;
   font-size: var(--type-13);
+}
+
+.markdown .md-table-wrap table {
+  margin: 0;
 }
 
 .markdown th,
@@ -1108,6 +1174,10 @@ a.msg-attachment-file.checking {
   .msg-action-btn {
     opacity: 1;
     padding: 8px 10px;
+  }
+
+  .md-code-copy {
+    padding: 6px 10px;
   }
 }
 

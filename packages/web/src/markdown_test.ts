@@ -210,3 +210,21 @@ test("the error card is written in the app language", () => {
   assertEquals(ja.includes("図を表示できません"), true);
   assertEquals(ja.includes("内容が &lt;svg&gt; 要素ではありません"), true);
 });
+
+test("code blocks carry a language label and a copy control", () => {
+  const html = render("```ts\nconst n = 1;\n```");
+  assertEquals(html.includes('class="md-code-block"'), true);
+  assertEquals(html.includes('<span class="md-code-lang">ts</span>'), true);
+  assertEquals(html.includes("data-code-copy"), true);
+  assertEquals(html.includes(">Copy</button>"), true);
+  assertEquals(
+    html.includes('<code class="language-ts">const n = 1;</code>'),
+    true,
+  );
+});
+
+test("tables are wrapped for horizontal scrolling", () => {
+  const html = render("| a | b |\n| - | - |\n| 1 | 2 |");
+  assertEquals(html.includes('<div class="md-table-wrap"><table>'), true);
+  assertEquals(html.includes("</table></div>"), true);
+});

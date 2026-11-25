@@ -3,7 +3,7 @@ import {
   parseVisualRef,
   type Translator,
 } from "@lumisca/core/shared";
-import { Marked, type RendererObject, type Tokens } from "marked";
+import { Marked, Renderer, type RendererObject, type Tokens } from "marked";
 import { withToken } from "./api-client.ts";
 
 function escapeHtml(text: string): string {
@@ -81,15 +81,37 @@ function rendererFor(options: MarkdownOptions): RendererObject {
       )}" />`;
     },
     code(token: Tokens.Code) {
-      // Returning false keeps marked's own code rendering (`false` = "use the
-      // default", the contract of RendererObject). A fence that is still
-      // streaming is not a diagram yet: rendering one per delta would decode
-      // the same incomplete picture over and over, and the picture appears
-      // the moment the closing fence arrives.
-      if (token.lang !== SVG_FENCE || !isClosedFence(token.raw)) return false;
-      return svgVisual(token.text, t);
+      // A fence that is still streaming is not a diagram yet: rendering one
+      // per delta would decode the same incomplete picture over and over, and
+      // the picture appears the moment the closing fence arrives.
+      if (token.lang === SVG_FENCE && isClosedFence(token.raw)) {
+        return svgVisual(token.text, t);
+      }
+      return codeBlock(token.text, token.lang ?? "", t);
+    },
+    table(token: Tokens.Table) {
+      const html = Renderer.prototype.table.call(this, token).trim();
+      return `<div class="md-table-wrap">${html}</div>\n`;
     },
   };
+}
+
+/** A fenced code block with a header carrying the language name and a copy
+ * control. Keeping the markup plain HTML lets MarkdownBlock answer clicks
+ * through one delegated listener without mounting per-block components. */
+function codeBlock(source: string, rawLang: string, t: Translator): string {
+  const lang = rawLang.trim().split(/\s+/)[0] ?? "";
+  const langAttr = lang ? ` class="language-${escapeHtml(lang)}"` : "";
+  const copyLabel = escapeHtml(t("chat.message.copy"));
+  return (
+    `<div class="md-code-block">` +
+    `<div class="md-code-header">` +
+    `<span class="md-code-lang">${escapeHtml(lang)}</span>` +
+    `<button type="button" class="md-code-copy" data-code-copy aria-label="${copyLabel}" title="${copyLabel}">${copyLabel}</button>` +
+    `</div>` +
+    `<pre><code${langAttr}>${escapeHtml(source)}</code></pre>` +
+    `</div>`
+  );
 }
 
 /** True when a fenced block's source ends with its closing fence row. */
