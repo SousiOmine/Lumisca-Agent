@@ -246,6 +246,19 @@ export function stellaRoutes(
     return c.json(snapshotOf(core, session, agentId, query));
   });
 
+  /** Search the conversation's full history (including turns before the
+   * latest compaction checkpoint), newest matches first. Works for disabled
+   * agents too so archived history remains searchable. */
+  app.get(routePath(paths.conversationSearch), (c) => {
+    const agentId = c.req.param("agentId");
+    requireAgent(core, agentId);
+    const q = (c.req.query("q") ?? "").trim();
+    if (q.length === 0) return c.json({ entries: [] });
+    const session = core.findStellaSession(agentId);
+    if (session === undefined) return c.json({ entries: [] });
+    return c.json({ entries: core.searchStellaConversation(session.id, q) });
+  });
+
   /** The conversation's revision: how many events the server has emitted
    * for it. Cheap (a counter read), so the client polls it and re-reads the
    * snapshot only when it moved. */

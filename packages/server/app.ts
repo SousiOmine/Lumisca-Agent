@@ -338,6 +338,8 @@ export function createApp(
           sessions.readStellaConversation(sessionId, query),
         readStellaConversationFromStore: (sessionId, query) =>
           sessions.readStellaConversationFromStore(sessionId, query),
+        searchStellaConversation: (sessionId, query, limit) =>
+          sessions.searchStellaConversation(sessionId, query, limit),
         getPendingQuestions: (sessionId) =>
           sessions.getPendingQuestions(sessionId),
         getPendingHandover: (sessionId) =>

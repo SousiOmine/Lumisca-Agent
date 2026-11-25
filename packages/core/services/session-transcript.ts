@@ -82,6 +82,43 @@ export class SessionTranscript {
     return this.stellaPage(this.mainAgentIdOf(id), query);
   }
 
+  /** Search all stored (and live-tail) conversation entries for literal
+   * whitespace-separated terms, matching text and attachment/file names.
+   * Returns up to `limit` newest matches, newest first. */
+  searchStellaConversation(
+    id: string,
+    query: string,
+    limit = 50,
+  ): StellaEntry[] {
+    const terms = query
+      .trim()
+      .toLowerCase()
+      .split(/[\s\u3000]+/u)
+      .filter((term) => term.length > 0);
+    if (terms.length === 0) return [];
+    const cap = Math.max(1, Math.min(limit, 100));
+    const mainAgentId = this.mainAgentIdOf(id);
+    const stored = this.deps.messages.listMessages(mainAgentId);
+    const all = conversationEntriesOf(stored.concat(this.unpersistedTail(id)));
+    const matches: StellaEntry[] = [];
+    for (let i = all.length - 1; i >= 0; i--) {
+      const entry = all[i]!;
+      if (entry.routine !== undefined) continue;
+      const haystack = [
+        entry.text,
+        ...entry.attachments.map((file) => file.displayName),
+        ...entry.files.map((file) => file.name),
+      ]
+        .join("\n")
+        .toLowerCase();
+      if (terms.every((term) => haystack.includes(term))) {
+        matches.push(entry);
+        if (matches.length >= cap) break;
+      }
+    }
+    return matches;
+  }
+
   /** The stored page of a conversation, before the live tail.
    *
    * Project first, page over the projection: a page must count what the

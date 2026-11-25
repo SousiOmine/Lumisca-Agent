@@ -60,6 +60,8 @@ export interface StellaModeScreenProps {
    * above this screen (see App.tsx). */
   screenOpen: boolean;
   onScreenOpenChange: (open: boolean) => void;
+  searchOpen?: boolean;
+  onSearchOpenChange?: (open: boolean) => void;
 }
 
 export function StellaModeScreen({
@@ -78,6 +80,8 @@ export function StellaModeScreen({
   onOpenSettings,
   screenOpen,
   onScreenOpenChange,
+  searchOpen,
+  onSearchOpenChange,
 }: StellaModeScreenProps) {
   const conversation = stella.conversation;
   return (
@@ -104,6 +108,8 @@ export function StellaModeScreen({
         status={status}
         screenOpen={screenOpen}
         onScreenOpenChange={onScreenOpenChange}
+        searchOpen={searchOpen}
+        onSearchOpenChange={onSearchOpenChange}
         input={input}
         onInputChange={onInputChange}
         images={images}

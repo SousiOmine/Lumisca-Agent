@@ -108,6 +108,7 @@ export const paths = {
   // --- one stella conversation (addressed by its agent) --------------------
   conversation,
   conversationMessages: `${conversation}/messages`,
+  conversationSearch: `${conversation}/search`,
   conversationRevision: `${conversation}/revision`,
   conversationPrompt: `${conversation}/prompt`,
   conversationAbort: `${conversation}${verbs.abort}`,

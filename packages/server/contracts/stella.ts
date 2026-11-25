@@ -98,6 +98,12 @@ export interface StellaApi {
     sessionId: string,
     query: WindowQuery,
   ): { items: StellaEntry[]; older: string | null };
+  /** Search all stored entries of one conversation, newest first. */
+  searchStellaConversation(
+    sessionId: string,
+    query: string,
+    limit?: number,
+  ): StellaEntry[];
   /** The questions the run is waiting on (the ask tool). */
   getPendingQuestions(sessionId: string): StellaQuestion[];
   /** The screen hand-over the run is blocked on, or null. */

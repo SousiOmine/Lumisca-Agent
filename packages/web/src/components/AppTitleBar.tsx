@@ -64,6 +64,8 @@ interface StellaStripProps {
    * show. */
   onToggleScreen?: () => void;
   screenOpen: boolean;
+  onToggleSearch?: () => void;
+  searchOpen?: boolean;
   /** Open the agent create dialog. This strip is the only place the list
    * screen has it at phone widths. */
   onCreateAgent: () => void;
@@ -168,6 +170,8 @@ function StellaStrip({
         onEditAgent={strip.onEditAgent}
         onToggleScreen={strip.onToggleScreen}
         screenOpen={strip.screenOpen}
+        onToggleSearch={strip.onToggleSearch}
+        searchOpen={strip.searchOpen}
       />
       {/* The list's create button, in the one row above the list at phone
        * widths: the sidebar's own copy sits under this row and left a gap of

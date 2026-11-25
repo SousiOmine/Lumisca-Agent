@@ -357,8 +357,12 @@ export function App({ initialData }: AppProps): ReactElement {
   // phone widths, where the list and the conversation are one screen each —
   // so it cannot belong to either.
   const [stellaScreenOpen, setStellaScreenOpen] = useState(false);
+  const [stellaSearchOpen, setStellaSearchOpen] = useState(false);
   const [editingStellaAgent, setEditingStellaAgent] = useState(false);
   const [creatingStellaAgent, setCreatingStellaAgent] = useState(false);
+  useEffect(() => {
+    setStellaSearchOpen(false);
+  }, [stellaAgentId]);
   const stellaHandedOver =
     stella.conversation?.handover !== null &&
     stella.conversation?.handover !== undefined;
@@ -393,6 +397,11 @@ export function App({ initialData }: AppProps): ReactElement {
             ? () => setStellaScreenOpen((open) => !open)
             : undefined,
         screenOpen: stellaScreenOpen,
+        onToggleSearch:
+          stellaAgentId !== null && stellaAgent !== undefined
+            ? () => setStellaSearchOpen((open) => !open)
+            : undefined,
+        searchOpen: stellaSearchOpen,
         onCreateAgent: () => setCreatingStellaAgent(true),
       }
     : {
@@ -518,6 +527,8 @@ export function App({ initialData }: AppProps): ReactElement {
             onOpenSettings={nav.openProviders}
             screenOpen={stellaScreenOpen}
             onScreenOpenChange={setStellaScreenOpen}
+            searchOpen={stellaSearchOpen}
+            onSearchOpenChange={setStellaSearchOpen}
           />
         ) : (
           // One pane per open tab, all of them mounted: the tab the address

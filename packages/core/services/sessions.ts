@@ -215,6 +215,14 @@ export class SessionService {
     return this.transcript.readStellaConversationFromStore(id, query);
   }
 
+  searchStellaConversation(
+    id: string,
+    query: string,
+    limit?: number,
+  ): StellaEntry[] {
+    return this.transcript.searchStellaConversation(id, query, limit);
+  }
+
   getSessionUsage(id: string): ContextUsageSummary {
     return this.transcript.getSessionUsage(id);
   }

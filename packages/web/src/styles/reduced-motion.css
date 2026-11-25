@@ -66,6 +66,7 @@
   .input-image,
   .stella-agent,
   .stella-handover,
+  .stella-search-panel,
   /* The gated entrances (styles/motion.css): the gate changes which rows
    * animate, not what "reduced" means for them. The one exception is the
    * user's capsule, whose flag sits on the row above it. */ [data-enter]
@@ -141,6 +142,7 @@
   .stella-agent-group-chevron,
   .stella-agent,
   .stella-titlebar-avatar,
+  .stella-search-toggle,
   .stella-screen-toggle,
   .msg-action-btn,
   /* A zoom a click takes: the picture still arrives at the new size, it just

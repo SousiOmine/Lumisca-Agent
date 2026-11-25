@@ -815,6 +815,43 @@
  * what it reports is whether the pane is on screen, which has to be visible
  * from the button alone (the pane can be off-screen past the fold on a narrow
  * window). */
+.stella-search-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    background-color var(--lum-dur-fast) var(--lum-ease-out),
+    border-color var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.stella-search-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.stella-search-toggle.on {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.stella-search-toggle:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 1px;
+}
+
+.stella-search-toggle + .stella-screen-toggle {
+  margin-left: 2px;
+}
+
 .stella-screen-toggle {
   display: inline-flex;
   align-items: center;
@@ -967,6 +1004,127 @@
   margin-left: 4px;
   font-size: var(--type-12);
   color: var(--text-faint);
+}
+
+/* --- stella: in-conversation search --------------------------------------- */
+
+.stella-search-panel {
+  flex: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  animation: lum-slide-down var(--lum-dur-fast) var(--lum-ease-out) both;
+}
+
+.stella-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 8px 16px;
+}
+
+.stella-search-icon {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.stella-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--type-13);
+}
+
+.stella-search-count {
+  flex: none;
+  font-size: var(--type-11-5);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.stella-search-close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+
+.stella-search-note {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 16px 10px;
+  font-size: var(--type-12);
+  color: var(--text-dim);
+}
+
+.stella-search-results {
+  max-width: 880px;
+  max-height: 36dvh;
+  margin: 0 auto;
+  padding: 0 12px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stella-search-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  transition: background-color var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.stella-search-hit:hover {
+  background: var(--surface-2);
+}
+
+.stella-search-hit-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stella-search-hit-speaker {
+  font-size: var(--type-12);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.stella-search-hit-time {
+  font-size: var(--type-11);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.stella-search-hit-text {
+  font-size: var(--type-12-5);
+  color: var(--text-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.stella-search-hit.expanded .stella-search-hit-text {
+  display: block;
+  -webkit-line-clamp: unset;
+  color: var(--text);
+}
+
+[data-highlight="true"] {
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  transition: background-color var(--lum-dur-slow) var(--lum-ease-out);
 }
 
 /* The wait before the conversation's first entry. It is the transcript's
@@ -1651,9 +1809,14 @@
 /* The back button and the screen toggle are the only ways in and out of the
  * conversation on a phone, so both are fingertip-sized targets. */
 @media (hover: none), (pointer: coarse) {
+  .stella-search-toggle,
   .stella-screen-toggle {
     width: 34px;
     height: 34px;
+  }
+
+  .stella-search-input {
+    font-size: var(--type-16);
   }
 
   .stella-back {
@@ -1698,6 +1861,7 @@
     height: 40px;
   }
 
+  .stella-search-toggle,
   .stella-screen-toggle {
     width: 36px;
     height: 36px;

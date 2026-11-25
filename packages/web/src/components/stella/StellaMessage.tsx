@@ -45,6 +45,8 @@ export function StellaMessage({
   author,
   showAvatar,
   entering,
+  entryKeyAttr,
+  highlighted,
   visualBase,
   attachBase,
   uploadBase,
@@ -63,6 +65,11 @@ export function StellaMessage({
    * back — must not: staging a hundred rows, or flashing history under the
    * reader, is not an arrival. */
   entering: boolean;
+  /** Stable entry key written to `data-entry-key` for in-conversation search
+   * jump targets. */
+  entryKeyAttr?: string;
+  /** Temporarily true right after jumping here from search results. */
+  highlighted?: boolean;
   /** Asset base of the conversation (see MarkdownBlock). */
   visualBase: string;
   /** Attachment base of the conversation (the files send_chat sent). */
@@ -96,6 +103,8 @@ export function StellaMessage({
         onRewind={onRewind}
         time={time}
         uploadBase={uploadBase}
+        entryKeyAttr={entryKeyAttr}
+        highlighted={highlighted}
       />
     );
   }
@@ -105,6 +114,8 @@ export function StellaMessage({
       author={author}
       showAvatar={showAvatar}
       entering={entering}
+      entryKeyAttr={entryKeyAttr}
+      highlighted={highlighted}
       visualBase={visualBase}
       attachBase={attachBase}
       onSend={onSend}
@@ -125,15 +136,23 @@ function UserBubble({
   onRewind,
   time,
   uploadBase,
+  entryKeyAttr,
+  highlighted,
 }: {
   entry: StellaEntry;
   onRewind?: (timestamp: number, text: string) => void;
   time: ComponentChildren;
   uploadBase: string;
+  entryKeyAttr?: string;
+  highlighted?: boolean;
 }) {
   const t = useT();
   return (
-    <div className="msg-user-wrap">
+    <div
+      className="msg-user-wrap"
+      data-entry-key={entryKeyAttr}
+      data-highlight={highlighted ? "true" : undefined}
+    >
       {entry.text && (
         <div className="msg user">
           <div className="msg-body">
@@ -174,6 +193,8 @@ function AgentBubble({
   author,
   showAvatar,
   entering,
+  entryKeyAttr,
+  highlighted,
   visualBase,
   attachBase,
   onSend,
@@ -184,6 +205,8 @@ function AgentBubble({
   showAvatar: boolean;
   /** See StellaMessage's `entering`. */
   entering: boolean;
+  entryKeyAttr?: string;
+  highlighted?: boolean;
   visualBase: string;
   attachBase: string;
   onSend?: (text: string) => void;
@@ -193,6 +216,8 @@ function AgentBubble({
     <div
       className={`stella-msg${showAvatar ? "" : " continued"}`}
       data-enter={entering || undefined}
+      data-entry-key={entryKeyAttr}
+      data-highlight={highlighted ? "true" : undefined}
     >
       {/* The face is decorative: the header names the agent the whole
           conversation is with, so a label on every message would be noise.

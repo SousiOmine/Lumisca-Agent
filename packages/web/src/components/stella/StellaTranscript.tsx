@@ -45,6 +45,7 @@ export function StellaTranscript({
   onLoadOlder,
   loadingOlder,
   pinToken,
+  highlightedKey,
 }: {
   conversation: StellaConversationState;
   /** The agent the conversation is with (its face and name). */
@@ -84,6 +85,7 @@ export function StellaTranscript({
    * to the newest entry has to arrive as a prop (see useTranscriptScroll's
    * pinToken). */
   pinToken?: number;
+  highlightedKey?: string | null;
 }) {
   // The transcript holds a WINDOW of the conversation (see the core's
   // session/transcript-window.ts): reaching the top reads the page before it
@@ -161,6 +163,8 @@ export function StellaTranscript({
                   author={author}
                   showAvatar={showAvatar}
                   entering={entering.has(key)}
+                  entryKeyAttr={key}
+                  highlighted={highlightedKey === key}
                   visualBase={visualBase}
                   attachBase={attachBase}
                   uploadBase={uploadBase}

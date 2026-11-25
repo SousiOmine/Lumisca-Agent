@@ -7,7 +7,11 @@ import {
 } from "./api-client.ts";
 import { conversationCalls, stellaFamily } from "./api-conversation.ts";
 import { openEventStream } from "./event-stream.ts";
-import type { StellaConversationSnapshot, StellaEvent } from "./types.ts";
+import type {
+  StellaConversationSnapshot,
+  StellaEntry,
+  StellaEvent,
+} from "./types.ts";
 
 /**
  * The stella conversation API: one surface of its own, bound to an agent.
@@ -63,6 +67,17 @@ export const stellaApi = {
       { method: "GET" },
     );
   },
+
+  /** Search the conversation's full stored history, newest matches first. */
+  search: (agentId: string, query: string) =>
+    request<{ entries: StellaEntry[] }>(
+      conversationPath(
+        paths.conversationSearch,
+        agentId,
+        `?q=${encodeURIComponent(query)}`,
+      ),
+      { method: "GET" },
+    ),
 
   /** The user finished at the screen (`vm_ask_user`). */
   finishHandover: (agentId: string, note: string, toolCallId: string) =>

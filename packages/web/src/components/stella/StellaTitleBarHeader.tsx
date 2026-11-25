@@ -2,6 +2,7 @@ import {
   IconArrowLeft,
   IconLayoutSidebarRightCollapse,
   IconLayoutSidebarRightExpand,
+  IconSearch,
 } from "@tabler/icons-preact";
 import { useT } from "../../i18n.ts";
 import type { StellaAgentSummary } from "../../types.ts";
@@ -24,6 +25,9 @@ export interface StellaTitleBarHeaderProps {
    * to a screen reader, and the toggle is the only control that reports the
    * pane's state. */
   screenOpen: boolean;
+  /** Toggle in-conversation search (present while an agent is open). */
+  onToggleSearch?: () => void;
+  searchOpen?: boolean;
 }
 
 /**
@@ -56,6 +60,8 @@ export function StellaTitleBarHeader({
   onEditAgent,
   onToggleScreen,
   screenOpen,
+  onToggleSearch,
+  searchOpen = false,
 }: StellaTitleBarHeaderProps) {
   const t = useT();
   // The caller decides: the panel is the conversation's information, and it
@@ -96,6 +102,18 @@ export function StellaTitleBarHeader({
           </button>
           <h1 className="stella-titlebar-name">{agent.name}</h1>
         </>
+      )}
+      {onToggleSearch !== undefined && (
+        <button
+          type="button"
+          className={`stella-search-toggle${searchOpen ? " on" : ""}`}
+          onClick={onToggleSearch}
+          aria-pressed={searchOpen}
+          title={t("chat.stella.search.open")}
+          aria-label={t("chat.stella.search.open")}
+        >
+          <IconSearch size={16} />
+        </button>
       )}
       {showToggle && (
         <button

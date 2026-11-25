@@ -24,6 +24,7 @@ import { Composer } from "./Composer.tsx";
 import { LoadingSkeleton } from "./LoadingSkeleton.tsx";
 import { StellaPane } from "./StellaPane.tsx";
 import { ShareFolderDialog } from "./stella/ShareFolderDialog.tsx";
+import { StellaSearchBar } from "./stella/StellaSearchBar.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
 
 interface StellaViewProps {
@@ -57,6 +58,8 @@ interface StellaViewProps {
    * component cannot keep that switch's state here. */
   screenOpen: boolean;
   onScreenOpenChange: (open: boolean) => void;
+  searchOpen?: boolean;
+  onSearchOpenChange?: (open: boolean) => void;
   /** Unsent composer text, owned by the App so it survives a remount. */
   input: string;
   onInputChange: (value: string) => void;
@@ -133,6 +136,8 @@ export function StellaView({
   status,
   screenOpen,
   onScreenOpenChange,
+  searchOpen = false,
+  onSearchOpenChange,
   input,
   onInputChange,
   images,
@@ -158,6 +163,47 @@ export function StellaView({
   // pinToken): this view only records that a submit happened.
   const [pinToken, setPinToken] = useState(0);
   const [sending, setSending] = useState(false);
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (highlightTimer.current !== null) clearTimeout(highlightTimer.current);
+    },
+    [],
+  );
+  // Ctrl/Cmd+F opens in-conversation search while viewing a stella agent.
+  useEffect(() => {
+    if (agent === null || onSearchOpenChange === undefined) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
+        return;
+      }
+      if (event.key.toLowerCase() !== "f") return;
+      event.preventDefault();
+      onSearchOpenChange(true);
+    };
+    globalThis.addEventListener("keydown", onKeyDown);
+    return () => globalThis.removeEventListener("keydown", onKeyDown);
+  }, [agent, onSearchOpenChange]);
+
+  const jumpToEntry = (key: string): boolean => {
+    const root = mainRef.current;
+    if (root === null) return false;
+    const nodes = root.querySelectorAll<HTMLElement>("[data-entry-key]");
+    for (const node of nodes) {
+      if (node.dataset.entryKey !== key) continue;
+      node.scrollIntoView({ block: "center" });
+      setHighlightedKey(key);
+      if (highlightTimer.current !== null) clearTimeout(highlightTimer.current);
+      highlightTimer.current = setTimeout(() => {
+        setHighlightedKey(null);
+        highlightTimer.current = null;
+      }, 1800);
+      return true;
+    }
+    return false;
+  };
   const visualBase = sessionVisualBase("", sessionId ?? "");
   const attachBase = sessionAttachmentBase("", sessionId ?? "");
   const uploadBase = stellaUploadBase(agent?.id ?? "");
@@ -276,7 +322,15 @@ export function StellaView({
 
   return (
     <div className="stella">
-      <div className="stella-main">
+      <div className="stella-main" ref={mainRef}>
+        {searchOpen && agent !== null && onSearchOpenChange !== undefined && (
+          <StellaSearchBar
+            agentId={agent.id}
+            agentName={agent.name}
+            onClose={() => onSearchOpenChange(false)}
+            onJumpToEntry={jumpToEntry}
+          />
+        )}
         {conversationError !== null ? (
           <div className="chat-scroll">
             <div className="chat-column">
@@ -349,6 +403,7 @@ export function StellaView({
             onLoadOlder={onLoadOlder}
             loadingOlder={loadingOlder}
             pinToken={pinToken}
+            highlightedKey={highlightedKey}
           />
         )}
         <div className="input-area">

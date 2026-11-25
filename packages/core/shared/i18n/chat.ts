@@ -469,6 +469,21 @@ export const chat = {
     ja: "ファイルを確認中…",
     en: "Checking files…",
   },
+  "chat.stella.search.open": { ja: "会話を検索", en: "Search conversation" },
+  "chat.stella.search.placeholder": {
+    ja: "メッセージを検索…",
+    en: "Search messages…",
+  },
+  "chat.stella.search.empty": {
+    ja: "一致するメッセージがありません",
+    en: "No matching messages",
+  },
+  "chat.stella.search.count": { ja: "{count}件", en: "{count} results" },
+  "chat.stella.search.you": { ja: "あなた", en: "You" },
+  "chat.stella.search.failed": {
+    ja: "検索できませんでした",
+    en: "Search failed",
+  },
   /** The second line of an agent's row: what the conversation last said.
    * Words are shown as they are; a message that carried no words is
    * described, because "3 files" is a caption rather than something the user
