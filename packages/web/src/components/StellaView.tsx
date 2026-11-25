@@ -20,6 +20,7 @@ import type {
   StellaStatus,
 } from "../types.ts";
 import { Composer } from "./Composer.tsx";
+import { LoadingSkeleton } from "./LoadingSkeleton.tsx";
 import { StellaPane } from "./StellaPane.tsx";
 import { ShareFolderDialog } from "./stella/ShareFolderDialog.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
@@ -262,11 +263,7 @@ export function StellaView({
         ) : conversation === null ? (
           <div className="chat-scroll">
             <div className="chat-column">
-              {loading && (
-                <p className="stella-loading" role="status">
-                  {t("chat.stella.loading")}
-                </p>
-              )}
+              {loading && <LoadingSkeleton label={t("chat.stella.loading")} />}
               {/* The first-run build is the one wait this mode cannot
                * hide. It lives here rather than in the title bar: it is
                * a sentence, and the title bar is one line of a name. */}

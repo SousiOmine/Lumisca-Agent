@@ -28,12 +28,88 @@
   overflow: hidden;
 }
 
+.chat-scroll-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .chat-scroll {
   flex: 1;
   overflow-y: auto;
   scrollbar-gutter: stable both-edges;
   min-height: 0;
   padding: 20px 0 10px;
+}
+
+/* Floating jump-to-latest control, anchored above the composer only while the
+ * reader has scrolled up into earlier history. */
+.scroll-bottom-btn {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-dim);
+  box-shadow: var(--shadow-panel);
+  animation: lum-fade var(--lum-dur-fast) var(--lum-ease-out) both;
+  transition:
+    background var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.scroll-bottom-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0;
+  width: min(360px, 100%);
+}
+
+.loading-skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.loading-skeleton-line {
+  display: block;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  animation: pulse 1.6s var(--lum-ease-in-out) infinite;
+}
+
+.loading-skeleton-line.wide {
+  width: 100%;
+}
+
+.loading-skeleton-line.mid {
+  width: 78%;
+}
+
+.loading-skeleton-line.short {
+  width: 52%;
+}
+
+.loading-skeleton-label {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--type-13);
 }
 
 /* Every open tab keeps its pane mounted, and the ones that are not shown carry

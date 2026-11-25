@@ -36,7 +36,8 @@
   .live-dot,
   .cursor,
   .spin,
-  .stella-typing-dot {
+  .stella-typing-dot,
+  .loading-skeleton-line {
     animation: none;
   }
 
@@ -45,6 +46,7 @@
   .conversation-turn,
   .msg.user,
   .chat-empty-inner,
+  .scroll-bottom-btn,
   .error-banner,
   .tool-detail,
   .notification-detail,

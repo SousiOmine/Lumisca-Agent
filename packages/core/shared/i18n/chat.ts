@@ -729,6 +729,10 @@ export const chat = {
     ja: "以前の履歴を読み込んでいます…",
     en: "Loading earlier history…",
   },
+  "chat.transcript.scrollToBottom": {
+    ja: "最新のメッセージへ",
+    en: "Scroll to latest",
+  },
 
   // --- message actions -----------------------------------------------------
   /** The icon-only buttons under a message. Both are given a name: a screen

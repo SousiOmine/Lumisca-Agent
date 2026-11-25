@@ -8,6 +8,7 @@ import { useT } from "../i18n.ts";
 import type { AgentMessage, SessionView, ToolResultMessage } from "../types.ts";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
+import { ScrollToBottomButton } from "./chat/ScrollToBottomButton.tsx";
 import { SegmentView } from "./chat/SegmentView.tsx";
 import type { ConversationTurnData, UserMessageImage } from "./chat/types.ts";
 import { ToolCall } from "./ToolCall.tsx";
@@ -108,7 +109,7 @@ export function Transcript({
   const t = useT();
   /** The streamed reply as of the previous commit (see the handoff above). */
   const streamed = useRef(streamingText);
-  const { scrollRef } = useTranscriptScroll({
+  const { scrollRef, scrolledUp, scrollToBottom } = useTranscriptScroll({
     onReachTop: () => hasOlder && onLoadOlder(),
     loadingOlder,
     firstMessageKey:
@@ -157,70 +158,73 @@ export function Transcript({
   }, [messages]);
 
   return (
-    <div className="chat-scroll" ref={scrollRef}>
-      <div className="chat-column">
-        {loadingOlder && (
-          <p className="chat-history-note" role="status">
-            {t("chat.history.loadingOlder")}
-          </p>
-        )}
-        {empty !== undefined &&
-          messages.length === 0 &&
-          streamingText.length === 0 &&
-          liveTools.length === 0 && (
-            <div className="chat-empty">
-              <div className="chat-empty-inner">{empty}</div>
+    <div className="chat-scroll-wrap">
+      <div className="chat-scroll" ref={scrollRef}>
+        <div className="chat-column">
+          {loadingOlder && (
+            <p className="chat-history-note" role="status">
+              {t("chat.history.loadingOlder")}
+            </p>
+          )}
+          {empty !== undefined &&
+            messages.length === 0 &&
+            streamingText.length === 0 &&
+            liveTools.length === 0 && (
+              <div className="chat-empty">
+                <div className="chat-empty-inner">{empty}</div>
+              </div>
+            )}
+          {rows.map(({ turn, key }, index) => (
+            <ConversationTurn
+              key={`${key}-${index}`}
+              entering={entering.has(key)}
+              turn={turn}
+              toolResults={toolResults}
+              runningTools={runningTools}
+              visualBase={visualBase}
+              attachBase={attachBase}
+              running={running && index === rows.length - 1}
+              endedAt={index === rows.length - 1 ? agentEndedAt : undefined}
+              onRewind={onRewind}
+              onCardSend={onCardSend}
+            />
+          ))}
+          {(segments.length > 0 || liveTools.length > 0) && (
+            <div className="msg">
+              <div className="msg-body markdown">
+                {segments.map((segment, index) => (
+                  <SegmentView
+                    key={index}
+                    segment={segment}
+                    streaming
+                    onSend={onCardSend}
+                    visualBase={visualBase}
+                  />
+                ))}
+                {/* The step's text is finished once a tool of that step
+                 * runs: a caret would claim it is still being written. And
+                 * a caret under a card would claim the card is prose. */}
+                {writingText && liveTools.length === 0 && (
+                  <span className="cursor" />
+                )}
+                {/* The calls of the step that is running, drawn from the
+                 * tool_start events: their assistant message only arrives
+                 * once the step (and its tools) ended, so a row taken from
+                 * the message alone appears after the work is done. */}
+                {liveTools.map((toolCall, index) => (
+                  <ToolCall
+                    key={toolCall.id || `live-${index}`}
+                    toolCall={toolCall}
+                    running={runningTools.has(toolCall.id)}
+                  />
+                ))}
+              </div>
             </div>
           )}
-        {rows.map(({ turn, key }, index) => (
-          <ConversationTurn
-            key={`${key}-${index}`}
-            entering={entering.has(key)}
-            turn={turn}
-            toolResults={toolResults}
-            runningTools={runningTools}
-            visualBase={visualBase}
-            attachBase={attachBase}
-            running={running && index === rows.length - 1}
-            endedAt={index === rows.length - 1 ? agentEndedAt : undefined}
-            onRewind={onRewind}
-            onCardSend={onCardSend}
-          />
-        ))}
-        {(segments.length > 0 || liveTools.length > 0) && (
-          <div className="msg">
-            <div className="msg-body markdown">
-              {segments.map((segment, index) => (
-                <SegmentView
-                  key={index}
-                  segment={segment}
-                  streaming
-                  onSend={onCardSend}
-                  visualBase={visualBase}
-                />
-              ))}
-              {/* The step's text is finished once a tool of that step
-               * runs: a caret would claim it is still being written. And
-               * a caret under a card would claim the card is prose. */}
-              {writingText && liveTools.length === 0 && (
-                <span className="cursor" />
-              )}
-              {/* The calls of the step that is running, drawn from the
-               * tool_start events: their assistant message only arrives
-               * once the step (and its tools) ended, so a row taken from
-               * the message alone appears after the work is done. */}
-              {liveTools.map((toolCall, index) => (
-                <ToolCall
-                  key={toolCall.id || `live-${index}`}
-                  toolCall={toolCall}
-                  running={runningTools.has(toolCall.id)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        {error && <ErrorBanner text={error} />}
+          {error && <ErrorBanner text={error} />}
+        </div>
       </div>
+      {scrolledUp && <ScrollToBottomButton onClick={scrollToBottom} />}
     </div>
   );
 }

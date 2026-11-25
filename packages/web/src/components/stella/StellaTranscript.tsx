@@ -11,6 +11,7 @@ import {
 } from "../../stella-state.ts";
 import { AppCard } from "../chat/AppCard.tsx";
 import { RunningIndicator } from "../chat/RunningIndicator.tsx";
+import { ScrollToBottomButton } from "../chat/ScrollToBottomButton.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
 import { EnvRequestCard } from "./EnvRequestCard.tsx";
 import { ShareRequestCard } from "./ShareRequestCard.tsx";
@@ -98,7 +99,7 @@ export function StellaTranscript({
     [conversation.entries],
   );
   const first = entries[0];
-  const { scrollRef } = useTranscriptScroll({
+  const { scrollRef, scrolledUp, scrollToBottom } = useTranscriptScroll({
     onReachTop: () => conversation.older !== null && onLoadOlder(),
     loadingOlder,
     firstMessageKey: first === undefined ? undefined : entryKey(first),
@@ -124,137 +125,144 @@ export function StellaTranscript({
   let previousDay: number | null = null;
 
   return (
-    <div className="chat-scroll" ref={scrollRef}>
-      <div className="chat-column stella-column">
-        {loadingOlder && (
-          <p className="chat-history-note" role="status">
-            {t("chat.history.loadingOlder")}
-          </p>
-        )}
-        {entries.length === 0 && !conversation.running && (
-          <p className="stella-loading" role="status">
-            {t("chat.stella.transcript.empty")}
-          </p>
-        )}
-        {entries.map((entry, index) => {
-          const day = startOfDay(entry.timestamp);
-          const newDay = day !== previousDay;
-          previousDay = day;
-          const previous = entries[index - 1];
-          // A run of the agent's messages reads as one answer: the face and
-          // the gap belong to the first of the run only.
-          const showAvatar =
-            entry.role !== "user" &&
-            (newDay || previous === undefined || previous.role === "user");
-          const key = entryKey(entry);
-          return (
-            <Fragment key={`${entry.role}-${entry.timestamp}-${index}`}>
-              {newDay && (
-                <div className="stella-day" role="separator">
-                  <span>{formatDaySeparator(entry.timestamp, locale)}</span>
-                </div>
-              )}
-              <StellaMessage
-                entry={entry}
-                author={author}
-                showAvatar={showAvatar}
-                entering={entering.has(key)}
-                visualBase={visualBase}
-                attachBase={attachBase}
-                uploadBase={uploadBase}
-                onRewind={onRewind}
-                onSend={onSend}
-              />
-            </Fragment>
-          );
-        })}
-        {conversation.liveUi !== null && (
-          <AppCard json={conversation.liveUi.json} streaming onSend={onSend} />
-        )}
-        {/* The question the run is blocked on, at the live edge where the
-         * answer belongs. It takes the agent's face and column like a
-         * message: the agent is the one asking. */}
-        {conversation.envRequest !== null && (
-          <div className="stella-msg">
-            <div className="stella-msg-avatar" aria-hidden="true">
-              <AgentAvatar
-                agentId={author.id}
-                name={author.name}
-                icon={author.icon}
-                size={26}
-              />
-            </div>
-            <div className="stella-msg-main">
-              <EnvRequestCard
-                // A different request is a different field: without this,
-                // a resync that replaces one request with another would keep
-                // the value typed for the first.
-                key={conversation.envRequest.toolCallId}
-                request={conversation.envRequest}
-                onProvide={onProvideEnv}
-                onDecline={onDeclineEnv}
-              />
-              {/* The sheet announced itself (a dialog takes the attention);
-               * a card does not, so the request says its sentence once for
-               * a screen reader. Silent otherwise: the same sentence is
-               * written in the card right beside it. */}
-              <span className="visually-hidden" role="status">
-                {t("chat.stella.env.request", {
-                  name: conversation.envRequest.name,
-                })}
-              </span>
-            </div>
-          </div>
-        )}
-        {/* The agent wants a folder from this computer. Like the env card it
-         * takes the agent's face and column: the agent is the one asking. */}
-        {conversation.shareRequest?.kind === "lend" && (
-          <div className="stella-msg">
-            <div className="stella-msg-avatar" aria-hidden="true">
-              <AgentAvatar
-                agentId={author.id}
-                name={author.name}
-                icon={author.icon}
-                size={26}
-              />
-            </div>
-            <div className="stella-msg-main">
-              <ShareRequestCard
-                key={conversation.shareRequest.toolCallId}
-                request={conversation.shareRequest}
-                onPick={onPickShare}
-                onDecline={onDeclineShare}
-              />
-              <span className="visually-hidden" role="status">
-                {t("chat.stella.share.request.announce")}
-              </span>
-            </div>
-          </div>
-        )}
-        {/* The dots say "the agent is composing". While the run waits for
-         * the user it is not composing but blocked, and the card above says
-         * so — two opposite signals in one column would read as a stuck
-         * run. */}
-        {conversation.running &&
-          conversation.envRequest === null &&
-          conversation.shareRequest?.kind !== "lend" && (
-            <RunningIndicator
-              avatar={
+    <div className="chat-scroll-wrap">
+      <div className="chat-scroll" ref={scrollRef}>
+        <div className="chat-column stella-column">
+          {loadingOlder && (
+            <p className="chat-history-note" role="status">
+              {t("chat.history.loadingOlder")}
+            </p>
+          )}
+          {entries.length === 0 && !conversation.running && (
+            <p className="stella-loading" role="status">
+              {t("chat.stella.transcript.empty")}
+            </p>
+          )}
+          {entries.map((entry, index) => {
+            const day = startOfDay(entry.timestamp);
+            const newDay = day !== previousDay;
+            previousDay = day;
+            const previous = entries[index - 1];
+            // A run of the agent's messages reads as one answer: the face and
+            // the gap belong to the first of the run only.
+            const showAvatar =
+              entry.role !== "user" &&
+              (newDay || previous === undefined || previous.role === "user");
+            const key = entryKey(entry);
+            return (
+              <Fragment key={`${entry.role}-${entry.timestamp}-${index}`}>
+                {newDay && (
+                  <div className="stella-day" role="separator">
+                    <span>{formatDaySeparator(entry.timestamp, locale)}</span>
+                  </div>
+                )}
+                <StellaMessage
+                  entry={entry}
+                  author={author}
+                  showAvatar={showAvatar}
+                  entering={entering.has(key)}
+                  visualBase={visualBase}
+                  attachBase={attachBase}
+                  uploadBase={uploadBase}
+                  onRewind={onRewind}
+                  onSend={onSend}
+                />
+              </Fragment>
+            );
+          })}
+          {conversation.liveUi !== null && (
+            <AppCard
+              json={conversation.liveUi.json}
+              streaming
+              onSend={onSend}
+            />
+          )}
+          {/* The question the run is blocked on, at the live edge where the
+           * answer belongs. It takes the agent's face and column like a
+           * message: the agent is the one asking. */}
+          {conversation.envRequest !== null && (
+            <div className="stella-msg">
+              <div className="stella-msg-avatar" aria-hidden="true">
                 <AgentAvatar
                   agentId={author.id}
                   name={author.name}
                   icon={author.icon}
                   size={26}
                 />
-              }
-            />
+              </div>
+              <div className="stella-msg-main">
+                <EnvRequestCard
+                  // A different request is a different field: without this,
+                  // a resync that replaces one request with another would keep
+                  // the value typed for the first.
+                  key={conversation.envRequest.toolCallId}
+                  request={conversation.envRequest}
+                  onProvide={onProvideEnv}
+                  onDecline={onDeclineEnv}
+                />
+                {/* The sheet announced itself (a dialog takes the attention);
+                 * a card does not, so the request says its sentence once for
+                 * a screen reader. Silent otherwise: the same sentence is
+                 * written in the card right beside it. */}
+                <span className="visually-hidden" role="status">
+                  {t("chat.stella.env.request", {
+                    name: conversation.envRequest.name,
+                  })}
+                </span>
+              </div>
+            </div>
           )}
-        {conversation.error !== undefined && (
-          <p className="error-text" role="alert">
-            {conversation.error}
-          </p>
-        )}
+          {/* The agent wants a folder from this computer. Like the env card it
+           * takes the agent's face and column: the agent is the one asking. */}
+          {conversation.shareRequest?.kind === "lend" && (
+            <div className="stella-msg">
+              <div className="stella-msg-avatar" aria-hidden="true">
+                <AgentAvatar
+                  agentId={author.id}
+                  name={author.name}
+                  icon={author.icon}
+                  size={26}
+                />
+              </div>
+              <div className="stella-msg-main">
+                <ShareRequestCard
+                  key={conversation.shareRequest.toolCallId}
+                  request={conversation.shareRequest}
+                  onPick={onPickShare}
+                  onDecline={onDeclineShare}
+                />
+                <span className="visually-hidden" role="status">
+                  {t("chat.stella.share.request.announce")}
+                </span>
+              </div>
+            </div>
+          )}
+          {/* The dots say "the agent is composing". While the run waits for
+           * the user it is not composing but blocked, and the card above says
+           * so — two opposite signals in one column would read as a stuck
+           * run. */}
+          {conversation.running &&
+            conversation.envRequest === null &&
+            conversation.shareRequest?.kind !== "lend" && (
+              <RunningIndicator
+                avatar={
+                  <AgentAvatar
+                    agentId={author.id}
+                    name={author.name}
+                    icon={author.icon}
+                    size={26}
+                  />
+                }
+              />
+            )}
+          {conversation.error !== undefined && (
+            <p className="error-text" role="alert">
+              {conversation.error}
+            </p>
+          )}
+        </div>
       </div>
+      {scrolledUp && <ScrollToBottomButton onClick={scrollToBottom} />}
     </div>
   );
 }

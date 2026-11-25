@@ -2,6 +2,7 @@ import type { ReactElement } from "preact/compat";
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import { AppDialogs } from "./components/AppDialogs.tsx";
 import { AppTitleBar, type TitleBarStrip } from "./components/AppTitleBar.tsx";
+import { LoadingSkeleton } from "./components/LoadingSkeleton.tsx";
 import { MacosTitleBarDrag } from "./components/MacosTitleBarDrag.tsx";
 import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
 import { DraftPane, SessionPane } from "./components/SessionPane.tsx";
@@ -549,9 +550,9 @@ export function App({ initialData }: AppProps): ReactElement {
               // bookmark, a reload, a link followed from elsewhere). Its
               // read is in flight, so the body says so rather than flashing
               // the new-session screen under the address of a session.
-              <div className="chat-empty" role="status">
+              <div className="chat-empty">
                 <div className="chat-empty-inner">
-                  <p>{t("common.loading")}</p>
+                  <LoadingSkeleton label={t("common.loading")} />
                 </div>
               </div>
             )}

@@ -223,7 +223,7 @@
 }
 
 .stella-agent.active {
-  background: var(--accent-soft);
+  background: var(--surface-3);
 }
 
 .stella-agent-name {

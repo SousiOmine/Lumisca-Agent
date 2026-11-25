@@ -1,5 +1,11 @@
 import type { RefObject } from "preact/compat";
-import { useCallback, useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "preact/hooks";
 
 /** The scroll contract of a transcript: stay pinned to the newest content
  * while the reader is at the bottom, never yank them back when they scroll up,
@@ -11,6 +17,10 @@ export interface TranscriptScroll {
   scrollRef: RefObject<HTMLDivElement | null>;
   /** Call when a message is submitted. */
   pinOnNextContent: () => void;
+  /** True while the reader has scrolled away from the newest content. */
+  scrolledUp: boolean;
+  /** Jump to the newest content and resume following it. */
+  scrollToBottom: () => void;
 }
 
 export interface TranscriptScrollOptions {
@@ -61,6 +71,7 @@ export function useTranscriptScroll(
 ): TranscriptScroll {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
+  const [scrolledUp, setScrolledUp] = useState(false);
   const pendingSubmit = useRef(false);
   /** The reader's offset at the last scroll event. A hidden pane loses its
    * own (see the restore below), and the offset they left is the one to put
@@ -135,6 +146,7 @@ export function useTranscriptScroll(
         // transcript) marked them as scrolled up and the follow stopped for
         // the rest of the conversation.
         userScrolledUp.current = false;
+        setScrolledUp(false);
         write(el.scrollHeight);
         return;
       }
@@ -167,8 +179,10 @@ export function useTranscriptScroll(
       ) {
         return;
       }
-      userScrolledUp.current =
+      const away =
         el.scrollHeight - el.scrollTop - el.clientHeight >= STICK_DISTANCE;
+      userScrolledUp.current = away;
+      setScrolledUp(away);
       // Not at the top: nothing to read before, and the position the reader
       // is at now is the one worth keeping.
       if (el.scrollTop > OLDER_DISTANCE) return;
@@ -250,12 +264,26 @@ export function useTranscriptScroll(
     pendingSubmit.current = true;
     holding.current = false;
     anchor.current = null;
+    userScrolledUp.current = false;
+    setScrolledUp(false);
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
     // Remember this write like the pin's (see ownWrite): a long message lands
     // between it and its scroll event, and that event must not be read as the
     // reader scrolling away.
+    ownWrite.current = { top: el.scrollTop, height: el.scrollHeight };
+  }, []);
+
+  /** Jump back to the live edge of the transcript. */
+  const scrollToBottom = useCallback(() => {
+    userScrolledUp.current = false;
+    setScrolledUp(false);
+    holding.current = false;
+    anchor.current = null;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
     ownWrite.current = { top: el.scrollTop, height: el.scrollHeight };
   }, []);
 
@@ -270,5 +298,5 @@ export function useTranscriptScroll(
     pinOnNextContent();
   }, [options.pinToken, pinOnNextContent]);
 
-  return { scrollRef, pinOnNextContent };
+  return { scrollRef, pinOnNextContent, scrolledUp, scrollToBottom };
 }
