@@ -40,14 +40,6 @@ systemdのユーザーユニットとしてマシン起動時に自動で立ち�
 実行後はサービスとして常駐するため，
 停止・削除する際には`lumisca-server service uninstall`コマンドを実行してください．
 
-APIキーなどの資格情報は暗号化して保存されます．
-初回起動時に`~/.config/lumisca-agent/secret.key`がモード0600で作られますが，
-このキーを設定ファイルと同じ場所に置きたくない場合は，
-サーバーの環境変数`LUMISCA_SECRET_KEY_FILE`で別のパスを指定してください．
-systemdのユーザーユニットで`LoadCredential=lumisca-secret:/path/to/key`を使う場合は，
-キーの内容をbase64で書いたファイルを指定すれば，サーバーが`$CREDENTIALS_DIRECTORY/lumisca-secret`から読みます．
-デスクトップアプリから起動するローカルサーバーでは，OSのキーチェーンに保存したキーをサーバーへ渡します．
-
 あとは同一Tailscaleネットワーク内のデバイスから、
 インストールしたサーバーのTailscaleホスト名にアクセスし、表示されたトークンを入力することで接続できます．
 
