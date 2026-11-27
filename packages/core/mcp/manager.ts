@@ -13,8 +13,17 @@ import {
   McpToolError,
   type McpToolInfo,
 } from "./client.ts";
+import type { MachineRunner } from "./machine.ts";
 import type { McpOAuthStore } from "./oauth.ts";
 import { connectionOAuthProvider, isMcpAuthRequired } from "./oauth.ts";
+
+/** The servers of one config that run inside the agent's machine, and how
+ * to start a process there. Absent for a session without a machine (code
+ * mode) or a config without machine servers. */
+export interface McpMachineScope {
+  servers: ReadonlySet<string>;
+  runner: MachineRunner;
+}
 
 /** A tool exposed by an MCP server, ready to be wrapped as an AgentTool:
  * the shape reported by {@link McpServerClient.listTools} plus the owning
@@ -52,6 +61,8 @@ export class McpManager {
      * happen at all (tests); a server with a grant gets an OAuth client, so
      * its tokens are used and refreshed like any other connection. */
     private readonly oauth?: McpOAuthStore,
+    /** Servers of this config that run in the agent's machine. */
+    private readonly machine?: McpMachineScope,
   ) {}
 
   private get enabledServers(): McpServerConfig[] {
@@ -81,8 +92,13 @@ export class McpManager {
         this.oauth === undefined
           ? undefined
           : connectionOAuthProvider(this.oauth, server);
+      const machine =
+        this.machine?.servers.has(server.name) === true
+          ? this.machine.runner
+          : undefined;
       pending = McpServerClient.connect(server, this.cwd, undefined, {
         ...(authProvider !== undefined ? { authProvider } : {}),
+        ...(machine !== undefined ? { machine } : {}),
       }).then(
         (client) => {
           this.pendingConnects.delete(server.name);

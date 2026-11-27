@@ -96,6 +96,9 @@ export const paths = {
   stellaAgentWake: `${agent}/wake`,
   stellaAgentTouch: `${agent}/touch`,
   stellaAgentIcon: `${agent}/icon/{name}`,
+  /** One agent's own MCP servers: they run inside its machine. */
+  stellaAgentMcp: `${agent}/mcp`,
+  stellaAgentMcpTest: `${agent}/mcp/test`,
   /** The routine list is read by agent id, and its handler reads
    * `agentId`, not the `id` the agent routes name. */
   stellaAgentRoutines: "/stella/agents/{agentId}/routines",

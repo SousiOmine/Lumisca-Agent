@@ -14,6 +14,8 @@ import { jsonError } from "./util.ts";
 class FakeMcpApi implements McpApi {
   appText: string | undefined;
   private readonly workspaceTexts = new Map<string, string>();
+  /** One agent's config text, as the routes stored it. */
+  readonly agentTexts = new Map<string, string>();
   /** The body of the last test call, to pin what the route forwards. */
   tested: string | undefined;
   /** What the probe answers (the route passes it through untouched). */
@@ -64,6 +66,22 @@ class FakeMcpApi implements McpApi {
   }
   testServer(text: string): Promise<McpTestResult> {
     this.tested = text;
+    return Promise.resolve(this.testResult);
+  }
+  getAgentMcpInfo(agentId: string): McpInfo {
+    const text = this.agentTexts.get(agentId);
+    return {
+      filePath: `agent ${agentId} settings`,
+      exists: text !== undefined,
+      servers: text === undefined ? [] : [FakeMcpApi.server("agent")],
+    };
+  }
+  setAgentMcpConfig(agentId: string, text: string): McpInfo {
+    this.agentTexts.set(agentId, text);
+    return this.getAgentMcpInfo(agentId);
+  }
+  testAgentServer(agentId: string, text: string): Promise<McpTestResult> {
+    this.tested = `agent ${agentId}: ${text}`;
     return Promise.resolve(this.testResult);
   }
   startAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot> {
@@ -306,4 +324,34 @@ test("/mcp/oauth/callback finishes the sign-in and answers a page", async () => 
   // An unknown state (expired, forged or already finished) is a 404 page.
   const unknown = await app.request("/mcp/oauth/callback?code=abc&state=nope");
   assertEquals(unknown.status, 404);
+});
+
+test("an agent's MCP config is stored and probed per agent", async () => {
+  const fake = new FakeMcpApi();
+  const app = makeApp(fake);
+  const text = '{"mcpServers":{"vm":{"command":"npx"}}}\n';
+
+  const put = await app.request("/stella/agents/a1/mcp", {
+    method: "PUT",
+    body: text,
+  });
+  assertEquals(put.status, 200);
+  assertEquals(fake.agentTexts.get("a1"), text);
+  // The app-level list is untouched: the two are separate.
+  assertEquals(fake.appText, undefined);
+
+  const get = await app.request("/stella/agents/a1/mcp");
+  assertEquals(
+    ((await get.json()) as McpInfo).servers.map((s) => s.name),
+    ["agent"],
+  );
+
+  const probe = await app.request("/stella/agents/a1/mcp/test", {
+    method: "POST",
+    body: text,
+  });
+  assertEquals(probe.status, 200);
+  // The probe of an agent's server runs inside that agent's machine, so the
+  // route has to carry the agent through.
+  assert(fake.tested?.startsWith("agent a1: ") === true);
 });

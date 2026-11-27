@@ -78,8 +78,9 @@ not have; never invent one.
 
 ## After adding
 
-- Say what was added, that it applies to every workspace and every session,
-  and — when the test ran — how many tools the server offers.
+- Say what was added, which list it went into (the app-level one, or this
+  agent's own when this is a Lumisca conversation), and — when the test ran
+  — how many tools the server offers.
 - Use the new tools through tool_search / tool_call. Do not describe the
   server's abilities beyond the tools it listed.
 
@@ -94,10 +95,15 @@ not have; never invent one.
 ## What these tools do not touch
 
 - A workspace's \`.mcp.json\` and agent plugins can add servers too. Only the
-  app-level list is edited here; a workspace entry with the same name
-  overrides an app-level server of that name.
-- MCP servers run beside Lumisca, not inside a stella machine: a filesystem
-  server reaches the host's files, and \`cwd\` is a path on the host.
+  list these tools edited is changed here; a workspace entry with the same
+  name overrides an app-level server of that name.
+- In a Lumisca conversation these tools edit that agent's own list, and its
+  servers run inside the agent's virtual machine: a filesystem server
+  reaches the machine's files, and \`cwd\` is a path there. In code mode they
+  edit the app-level list, whose servers run on the host.
+- An agent's server is reached through the agent's machine, so it starts
+  only while that machine is running. A stopped machine is not a broken
+  server.
 - Credentials passed in env or headers are stored in the app's settings
   file. Do not repeat them in your reply.
 `;
@@ -109,9 +115,10 @@ export function mcpServersSkill(): SkillDef {
     name: "mcp-servers",
     description:
       "Use this skill whenever the user asks to add, remove or list MCP " +
-      "servers — the app-level list in Settings → MCP servers that every " +
-      "workspace and session uses. It teaches mcp_add, mcp_remove and " +
-      "mcp_list, which are not preloaded: find them with tool_search first.",
+      "servers — the list Settings → MCP servers shows, which is the app's " +
+      "own list or, in a Lumisca conversation, that agent's. It teaches " +
+      "mcp_add, mcp_remove and mcp_list, which are not preloaded: find them " +
+      "with tool_search first.",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {

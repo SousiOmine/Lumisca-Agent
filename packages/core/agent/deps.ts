@@ -8,6 +8,7 @@ import type { Api } from "../domain/model.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import type { McpConfig } from "../mcp/config.ts";
+import type { MachineRunner } from "../mcp/machine.ts";
 import type { McpAdmin } from "../mcp/manage-tools.ts";
 import type { McpOAuthStore } from "../mcp/oauth.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
@@ -116,11 +117,20 @@ export interface AgentRuntime {
   /** Merged MCP config (app-level + workspace .mcp.json + plugins) for a
    * workspace, with collected config errors. */
   loadMergedMcp(workspace: Workspace): { config: McpConfig; errors: string[] };
-  /** The app-level MCP config the agent may change through `mcp_add` /
-   * `mcp_remove` / `mcp_list` (see mcp/manage-tools.ts). Omitted only where
-   * the pool is built by hand without one (tests): the session then simply
-   * has no administration tools. */
-  mcpAdmin?: () => McpAdmin;
+  /** One agent's MCP config: the servers that run inside its machine (see
+   * mcp/service.ts). Absent for a pool without a machine: a stella session
+   * then has no machine servers, and code mode never asks. */
+  loadAgentMcp?(agentId: string): { config: McpConfig; errors: string[] };
+  /** How to start a process inside one agent's machine (see
+   * mcp/machine.ts). Absent where no machine exists. */
+  machineRunner?(agentId: string): MachineRunner | undefined;
+  /** The MCP config the agent may change through `mcp_add` /
+   * `mcp_remove` / `mcp_list` (see mcp/manage-tools.ts). The argument is
+   * the persona of a stella session: its tools then edit that agent's own
+   * config, which is where its servers run. Omitted only where the pool is
+   * built by hand without one (tests): the session then simply has no
+   * administration tools. */
+  mcpAdmin?: (agentId?: string) => McpAdmin;
   /** Where MCP OAuth grants live: a session's connections use (and refresh)
    * the tokens the settings sign-in stored. Absent in tests that build the
    * pool by hand and never sign in. */
