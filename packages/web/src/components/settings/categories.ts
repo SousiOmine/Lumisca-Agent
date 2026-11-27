@@ -37,6 +37,7 @@ export const SETTINGS_CATEGORIES = [
   "personalize",
   "security",
   "experimental",
+  "screen",
   "prompts",
 ] as const;
 

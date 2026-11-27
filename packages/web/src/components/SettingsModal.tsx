@@ -105,10 +105,12 @@ type ProvidersView =
  * lists, so adding a category meant editing three places and a forgotten one
  * was not a type error. One table cannot drift from itself.
  *
- * One page is code mode's alone: saved prompts feed the slash menu, which
- * exists only in code mode's composer. It is a page of its own rather than a
- * section of 実験的機能 (a list of snippets under a row of switches), and it
- * is drawn only while code mode is offered (see visibleCategories).
+ * Two pages are code mode's alone: the screen-control switch, which no
+ * stella session reads, and saved prompts, which feed a slash menu that
+ * exists only in code mode's composer. Each is a page of its own rather than
+ * a section of 実験的機能 (a switch and a list of snippets under a row of
+ * switches), and each is drawn only while code mode is offered (see
+ * visibleCategories).
  *
  * Nothing here belongs to one agent. Routines schedule requests on one
  * agent's conversation, so they are not a category at all: the agent's own
@@ -302,14 +304,7 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     owner: "server",
     labelKey: "settings.nav.security",
     // The command check guards every bash / eval call, so both modes have it.
-    // Computer use is the other half of "what may the agent do": one page, one
-    // question, with the code-only scope said under its own heading.
-    render: () => (
-      <>
-        <CommandSafetyPanel />
-        <ComputerUsePanel />
-      </>
-    ),
+    render: () => <CommandSafetyPanel />,
   },
   {
     id: "experimental",
@@ -318,6 +313,17 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     // The scripting tool call reaches both modes' sessions, so the page is
     // shared rather than one mode's.
     render: () => <ExperimentalPanel />,
+  },
+  {
+    id: "screen",
+    owner: "server",
+    codeModeOnly: true,
+    labelKey: "settings.nav.screen",
+    // The switch offers this computer's screen to code mode's sessions; a
+    // stella conversation drives its own machine and never reads the flag.
+    // A page of its own, drawn only while code mode is offered, so it cannot
+    // sit on a shared page as a control that changes nothing.
+    render: () => <ComputerUsePanel />,
   },
   {
     id: "prompts",

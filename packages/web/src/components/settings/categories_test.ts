@@ -70,6 +70,7 @@ test("every category is named once, in the table's order", () => {
       "personalize",
       "security",
       "experimental",
+      "screen",
       "prompts",
     ],
   );

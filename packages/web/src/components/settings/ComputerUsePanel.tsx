@@ -6,11 +6,17 @@ import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
 
-/** Settings → セキュリティ: computer use — the agent captures this machine's
+/** Settings → 画面の操作: computer use — the agent captures this machine's
  * screen and drives its mouse and keyboard. The feature is opt-in, because
  * a run can then click and type anywhere on the machine.
  *
- * The flag decides which tools every session is offered, so the server
+ * Its own page, and code mode's alone: the flag decides which tools code
+ * mode's sessions are offered, while a stella conversation works on its own
+ * machine and never reads it. The page is drawn only while code mode is
+ * offered (SettingsModal's `codeModeOnly`), so a reader who does not run
+ * code mode never meets a switch that changes nothing.
+ *
+ * The flag decides which tools a session is offered, so the server
  * brings the open sessions onto it: an idle one is rebuilt, and a running
  * one keeps its run and has the tools reseeded in place (the new tools are
  * found through tool_search from the next turn on). A server whose
@@ -39,10 +45,7 @@ export function ComputerUsePanel() {
   };
 
   return (
-    <SettingsSection
-      title={t("settings.security.computerUse")}
-      description={t("settings.scope.codeOnly")}
-    >
+    <SettingsSection>
       <SettingRow
         label={t("settings.computerUse.title")}
         description={

@@ -25,12 +25,9 @@ export const settings = {
   "settings.nav.prompts": { ja: "保存済みプロンプト", en: "Saved prompts" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
   "settings.nav.experimental": { ja: "実験的機能", en: "Experimental" },
-  /** The one line under a page title whose values only code mode's sessions
-   * use. Every other page's owner is read from the navigation group. */
-  "settings.scope.codeOnly": {
-    ja: "Lumisca codeの会話でのみ使います。",
-    en: "Only Lumisca code's conversations use these values.",
-  },
+  /** The page the computer-use switch moved to: it decides what code mode's
+   * sessions may do, and it is drawn only while code mode is offered. */
+  "settings.nav.screen": { ja: "画面の操作", en: "Screen control" },
   "settings.notifications.none": {
     ja: "この端末で使える通知はありません。",
     en: "No notification channels are available on this device.",
@@ -868,11 +865,6 @@ export const settings = {
   "settings.security.title": {
     ja: "コマンド安全チェック",
     en: "Command safety check",
-  },
-  /** The second section of the security page: computer use. */
-  "settings.security.computerUse": {
-    ja: "画面操作",
-    en: "Screen control",
   },
   "settings.security.description": {
     ja: "危険なコマンドは実行を止めます。承認したコマンドは次回から自動で実行します。",
