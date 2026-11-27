@@ -7,14 +7,9 @@ import { atomicWriteTextFileSync } from "../fs.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import type { McpServerConfig } from "../shared/mcp-config.ts";
-import {
-  APP_MCP_SETTINGS_KEY,
-  agentMcpSettingsKey,
-  mcpServerEntry,
-} from "../shared/mod.ts";
+import { APP_MCP_SETTINGS_KEY, mcpServerEntry } from "../shared/mod.ts";
 import {
   APP_MCP_SOURCE,
-  agentMcpSource,
   loadMcpConfig,
   MCP_CONFIG_FILE,
   MCP_TEST_SOURCE,
@@ -81,14 +76,8 @@ export class McpConfigStore {
 
   /** The live statuses of the given sessions, for one config's servers. */
   private statusesOf(workspaceId?: string): McpServerStatus[] {
-    return this.statusesOfSessions(this.deps.listSessions(workspaceId));
-  }
-
-  private statusesOfSessions(
-    sessions: readonly SessionInfo[],
-  ): McpServerStatus[] {
     const statuses: McpServerStatus[] = [];
-    for (const session of sessions) {
+    for (const session of this.deps.listSessions(workspaceId)) {
       const sessionStatuses = this.deps.agentMcpStatus(session.id);
       if (sessionStatuses) statuses.push(...sessionStatuses);
     }
@@ -127,24 +116,17 @@ export class McpConfigStore {
     });
   }
 
-  /** The `mcpServers` object of a stored config, validated first so a
+  /** The app-level `mcpServers` object as stored, validated first so a
    * broken stored config fails with the reader's message instead of a bare
    * JSON syntax error. */
-  private serversDocument(
-    key: string,
-    source: string,
-  ): Record<string, unknown> {
-    const raw = this.deps.settings.get(key);
+  private appServersDocument(): Record<string, unknown> {
+    const raw = this.deps.settings.get(APP_MCP_SETTINGS_KEY);
     if (raw === undefined) return {};
-    this.validateConfig(raw, source);
+    this.validateConfig(raw, APP_MCP_SOURCE);
     const document = JSON.parse(raw) as {
       mcpServers: Record<string, unknown>;
     };
     return document.mcpServers;
-  }
-
-  private appServersDocument(): Record<string, unknown> {
-    return this.serversDocument(APP_MCP_SETTINGS_KEY, APP_MCP_SOURCE);
   }
 
   /** The config text of an app-level `mcpServers` object. The caller stores
@@ -152,92 +134,6 @@ export class McpConfigStore {
    * open sessions in the same turn. */
   private appServersText(servers: Record<string, unknown>): string {
     return JSON.stringify({ mcpServers: servers }, null, 2) + "\n";
-  }
-
-  /**
-   * One agent's MCP config: the servers that run inside that agent's
-   * machine. Stored under a per-agent settings key, so two agents can run
-   * different servers without sharing a process, a home directory or a
-   * token.
-   */
-  loadAgentMcpConfig(agentId: string): McpConfig {
-    const raw = this.deps.settings.get(agentMcpSettingsKey(agentId));
-    if (raw === undefined) return this.emptyMcpConfig(agentMcpSource(agentId));
-    return parseMcpConfig(raw, agentMcpSource(agentId));
-  }
-
-  /** The sessions of one agent (its conversation, once it exists). */
-  private sessionsOfAgent(agentId: string): SessionInfo[] {
-    return this.deps
-      .listSessions()
-      .filter((session) => session.personaId === agentId);
-  }
-
-  /** One agent's config with the live statuses of its open conversation. */
-  getAgentMcpInfo(agentId: string): McpInfo {
-    const exists =
-      this.deps.settings.get(agentMcpSettingsKey(agentId)) !== undefined;
-    return this.toMcpInfo(
-      this.loadAgentMcpConfig(agentId),
-      this.statusesOfSessions(this.sessionsOfAgent(agentId)),
-      exists,
-    );
-  }
-
-  /** Replace one agent's config, then bring that agent's conversation onto
-   * it. The mutation always runs: a config must never be lost to a running
-   * session. */
-  setAgentMcpConfig(agentId: string, text: string): void {
-    this.validateConfig(text, agentMcpSource(agentId));
-    const sessions = this.sessionsOfAgent(agentId);
-    this.deps.applyMcpConfigChange(sessions, () => {
-      this.deps.settings.set(agentMcpSettingsKey(agentId), text);
-    });
-  }
-
-  /** Add one server to an agent's config; returns the text to store through
-   * setAgentMcpConfig. The stored document is edited as JSON for the same
-   * reason as addAppServer: parsing expands variable references. */
-  addAgentServer(agentId: string, server: McpServerConfig): string {
-    const servers = this.serversDocument(
-      agentMcpSettingsKey(agentId),
-      agentMcpSource(agentId),
-    );
-    if (Object.hasOwn(servers, server.name)) {
-      throw new CoreError(
-        'An MCP server named "' +
-          server.name +
-          '" is already configured for ' +
-          "this agent. Remove it first with mcp_remove, or choose another name.",
-        "conflict",
-      );
-    }
-    Object.defineProperty(servers, server.name, {
-      value: mcpServerEntry(server),
-      enumerable: true,
-      configurable: true,
-      writable: true,
-    });
-    return this.appServersText(servers);
-  }
-
-  /** Remove one server from an agent's config by name. */
-  removeAgentServer(agentId: string, name: string): string {
-    const servers = this.serversDocument(
-      agentMcpSettingsKey(agentId),
-      agentMcpSource(agentId),
-    );
-    if (!Object.hasOwn(servers, name)) {
-      throw new CoreError(
-        'No MCP server named "' +
-          name +
-          '" is configured for this agent. ' +
-          "Use mcp_list to see this agent's servers.",
-        "not_found",
-      );
-    }
-    delete servers[name];
-    return this.appServersText(servers);
   }
 
   /**

@@ -129,9 +129,7 @@ export function resolveSessionWhere(
     // the user has not configured one; the tools are then simply absent.
     webSearch: deps.webSearch?.(),
     // The MCP administration surface. A core always has one; a pool built
-    // by hand without it simply gets neither the tools nor the guide. A
-    // stella session's tools edit that agent's own config, because its
-    // servers run inside its machine.
-    mcpAdmin: deps.mcpAdmin?.(session.personaId),
+    // by hand without it simply gets neither the tools nor the guide.
+    mcpAdmin: deps.mcpAdmin?.(),
   };
 }

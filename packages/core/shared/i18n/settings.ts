@@ -662,19 +662,6 @@ export const settings = {
   },
   "settings.mcp.notStarted": { ja: "未起動", en: "Not started" },
   "settings.mcp.enabled": { ja: "有効", en: "Enabled" },
-  "settings.mcp.scopeLabel": { ja: "設定の対象", en: "Applies to" },
-  "settings.mcp.scopeApp": {
-    ja: "このアプリ",
-    en: "This app",
-  },
-  "settings.mcp.scopeAgentNote": {
-    ja: "このエージェントの仮想マシンの中で動きます。",
-    en: "Runs inside this agent's virtual machine.",
-  },
-  "settings.mcp.authUnavailable": {
-    ja: "エージェントのMCPサーバーではサインインを使えません。ヘッダーに認証情報を設定してください。",
-    en: "Sign-in is not available for an agent's MCP server. Put the credential in a header.",
-  },
 
   // --- mcp detail -----------------------------------------------------------
   "settings.mcp.editTitle": { ja: "編集: {name}", en: "Edit: {name}" },

@@ -11,9 +11,7 @@ import { buildSessionHubs } from "./session-hubs.ts";
 import { resolveSessionWhere } from "./session-location.ts";
 import {
   ensureMcpAttachment,
-  mergedMcpForSession,
   replaceMcpAttachment,
-  sameMachineServers,
   sameMcpConfig,
 } from "./session-mcp.ts";
 import { buildContextProviders, ensureSystemPrompt } from "./session-prompt.ts";
@@ -322,13 +320,12 @@ export class AgentFactory {
     // byte-for-byte the same, and the connection that already got its 401
     // (and was dropped) is the whole reason to reload: skipping it would
     // keep the session on a manager that never sees the new grant.
-    const merged = mergedMcpForSession(this.deps, session, workspace);
+    const merged = this.deps.loadMergedMcp(workspace);
     const previous = runtime.mcp;
     if (
       options.reloadCredentials !== true &&
       previous !== undefined &&
-      sameMcpConfig(previous.config, merged.config) &&
-      sameMachineServers(previous, merged)
+      sameMcpConfig(previous.config, merged.config)
     ) {
       return;
     }

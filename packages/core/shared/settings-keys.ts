@@ -255,19 +255,6 @@ export function parsePercentSetting(
  * settings surface. */
 export const APP_MCP_SETTINGS_KEY = "mcp_servers";
 
-/** Prefix of the settings key holding one agent's MCP server config (JSON).
- *
- * A server of this list runs inside the agent's machine, so the list is per
- * agent: two agents have different machines, files and network. The text has
- * the same shape as the app-level config, and it is encrypted for the same
- * reason. */
-export const AGENT_MCP_SETTINGS_PREFIX = "mcp_servers:agent:";
-
-/** The settings key one agent's MCP config lives under. */
-export function agentMcpSettingsKey(agentId: string): string {
-  return AGENT_MCP_SETTINGS_PREFIX + agentId;
-}
-
 /** Settings-table key holding the server-side connection registry. It
  * contains tokens, so it is protected from the generic settings surface. */
 export const CONNECTIONS_KEY = "connections";

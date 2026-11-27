@@ -61,7 +61,6 @@ export const INTEGRATION_SUITE: readonly string[] = [
   "packages/core/db/schema_test.ts",
   "packages/core/db/vacuum_test.ts",
   "packages/core/fs_test.ts",
-  "packages/core/mcp/machine_test.ts",
   "packages/core/mcp/mcp_test.ts",
   "packages/core/memory/agents-md_test.ts",
   "packages/core/memory/instructions_test.ts",

@@ -651,13 +651,9 @@ test("stella conversation: deleting an agent takes its conversation", async () =
       role: "r",
     });
     const session = await core.internals.getOrCreateStellaSession(agent.id);
-    // The agent's own MCP config may hold tokens; it must go with the row.
-    core.services.mcp.setAgentMcpConfig(agent.id, '{"mcpServers":{}}');
-    assertEquals(core.services.mcp.getAgentMcpInfo(agent.id).exists, true);
     await core.services.stellaAgents.deleteStellaAgent(agent.id);
     assertEquals(core.services.sessions.getSession(session.id), undefined);
     assertEquals(core.services.stellaAgents.listStellaAgents(), []);
-    assertEquals(core.services.mcp.getAgentMcpInfo(agent.id).exists, false);
   } finally {
     await core.close();
   }

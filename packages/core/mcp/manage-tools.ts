@@ -1,9 +1,7 @@
 /**
  * The agent's own MCP server administration: `mcp_add`, `mcp_remove` and
- * `mcp_list` over the list its session's tools belong to. In code mode that
- * is the app-level config every workspace uses; in a stella conversation it
- * is that agent's own config, whose servers run inside its machine (see
- * mcp/service.ts, agentAdmin).
+ * `mcp_list` over the app-level config — the list Settings → MCP servers
+ * shows, which every workspace and every session uses.
  *
  * Discoverable through tool_search rather than preloaded (most
  * conversations never touch the config), and main agent only: the config
@@ -85,9 +83,9 @@ const addSchema = object({
   ),
   cwd: optional(
     string(
-      "stdio servers: working directory. A relative path resolves against " +
-        "the session's workspace, or against the agent's home in a stella " +
-        "conversation, so prefer an absolute path.",
+      "stdio servers: working directory. The app-level config is shared by " +
+        "every session, and a relative path resolves against each session's " +
+        "own workspace, so prefer an absolute path.",
     ),
   ),
   url: optional(

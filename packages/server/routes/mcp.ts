@@ -5,7 +5,6 @@ import {
   type McpInfo,
   type McpTestResult,
 } from "@lumisca/core";
-import { paths, routePath } from "@lumisca/core/shared";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { renderMcpAuthPage } from "../render.ts";
@@ -21,17 +20,11 @@ export interface McpApi {
    * app-level config). */
   getMcpInfo(workspaceId: string): McpInfo;
   setMcpConfig(workspaceId: string, text: string): McpInfo;
-  /** One stella agent's config: the servers that run inside its machine.
-   * Separate from the app-level list because the machine is the agent's. */
-  getAgentMcpInfo(agentId: string): McpInfo;
-  setAgentMcpConfig(agentId: string, text: string): McpInfo;
   /** One-shot connection test of a single server config: connect, list the
    * tools, disconnect. Runs here because the server owns the child
    * processes a stdio server needs. Reaching the server is reported as a
    * result (`ok:false`), an invalid body still throws. */
   testServer(text: string): Promise<McpTestResult>;
-  /** The same probe, run inside one agent's machine. */
-  testAgentServer(agentId: string, text: string): Promise<McpTestResult>;
   /** Start an interactive OAuth sign-in for one HTTP server. Resolves once
    * the flow waits for the browser (the snapshot carries the authorization
    * URL) or has failed to start. */
@@ -121,24 +114,6 @@ export function mcpRoutes(
     const text = await c.req.text();
     requireNonEmptyString(text.trim(), "JSON body");
     return c.json(await core.testServer(text));
-  });
-
-  // One agent's own servers. They run inside that agent's machine, so the
-  // config is per agent rather than shared with the app-level list, and the
-  // test probe runs there too.
-  app.get(routePath(paths.stellaAgentMcp), (c) => {
-    return c.json(core.getAgentMcpInfo(c.req.param("id")));
-  });
-
-  app.put(routePath(paths.stellaAgentMcp), async (c) => {
-    const id = c.req.param("id");
-    return await putConfig(c, (text) => core.setAgentMcpConfig(id, text));
-  });
-
-  app.post(routePath(paths.stellaAgentMcpTest), async (c) => {
-    const text = await c.req.text();
-    requireNonEmptyString(text.trim(), "JSON body");
-    return c.json(await core.testAgentServer(c.req.param("id"), text));
   });
 
   // OAuth sign-in of one HTTP server: same single-server JSON body. The

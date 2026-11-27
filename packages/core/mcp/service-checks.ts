@@ -1,6 +1,5 @@
 import { errorMessage } from "../errors.ts";
 import { probeMcpServer } from "./client.ts";
-import type { MachineRunner } from "./machine.ts";
 import {
   connectionOAuthProvider,
   isMcpAuthRequired,
@@ -68,13 +67,7 @@ export class McpChecks {
    * failure: the server is fine, it just wants the user to sign in first
    * (see McpService.startAuth).
    */
-  async testServer(
-    text: string,
-    timeoutMs?: number,
-    /** Run the probe inside an agent's machine. Absent for the app-level
-     * list, whose servers run here. */
-    machine?: MachineRunner,
-  ): Promise<McpTestResult> {
+  async testServer(text: string, timeoutMs?: number): Promise<McpTestResult> {
     const server = this.config.parseSingleServer(text);
     // A stored grant is what makes the probe connect *as* the signed-in
     // user (and refresh the token when it has expired). Without one the
@@ -83,7 +76,6 @@ export class McpChecks {
     try {
       const tools = await probeMcpServer(server, process.cwd(), timeoutMs, {
         ...(authProvider !== undefined ? { authProvider } : {}),
-        ...(machine !== undefined ? { machine } : {}),
       });
       return {
         ok: true,

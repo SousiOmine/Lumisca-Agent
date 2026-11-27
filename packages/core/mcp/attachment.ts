@@ -20,9 +20,6 @@ export class McpAttachment {
   constructor(
     readonly manager: McpManager,
     readonly config: McpConfig,
-    /** Names of this config's servers that run in the agent's machine.
-     * Absent when none does. */
-    readonly machineServers?: ReadonlySet<string>,
   ) {
     this.ready = createMcpTools(manager)
       .then((tools) => {

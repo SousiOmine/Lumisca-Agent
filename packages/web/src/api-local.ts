@@ -465,22 +465,6 @@ export const api = {
       method: "POST",
       body: text,
     }),
-  /** One stella agent's MCP config: the servers that run inside its
-   * machine. The same shape and text format as the app-level one. */
-  getAgentMcpConfig: (agentId: string) =>
-    request<McpInfo>(
-      "/api/stella/agents/" + encodeURIComponent(agentId) + "/mcp",
-    ),
-  putAgentMcpConfig: (agentId: string, text: string) =>
-    request<McpInfo>(
-      "/api/stella/agents/" + encodeURIComponent(agentId) + "/mcp",
-      { method: "PUT", body: text },
-    ),
-  testAgentMcpServer: (agentId: string, text: string) =>
-    request<McpTestResult>(
-      "/api/stella/agents/" + encodeURIComponent(agentId) + "/mcp/test",
-      { method: "POST", body: text },
-    ),
   /** Start an OAuth sign-in for one HTTP server (the same single-server
    * config testMcpServer takes). Resolves once the flow waits for the
    * browser, so the caller can open `authorizationUrl` right away. */

@@ -10,7 +10,7 @@ import { useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
 import { useT } from "../../i18n.ts";
-import type { McpServerInfo, McpTestResult, McpTestTool } from "../../types.ts";
+import type { McpServerInfo, McpTestTool } from "../../types.ts";
 import { Field } from "../Field.tsx";
 import { mcpDraftKey } from "./mcpDraft.ts";
 import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
@@ -71,8 +71,6 @@ export function McpDetail({
   saveError,
   onSave,
   onCancel,
-  probe = (text) => api.testMcpServer(text),
-  allowAuth = true,
 }: {
   initial: McpServerInfo | null;
   existingNames: string[];
@@ -83,12 +81,6 @@ export function McpDetail({
   saveError: string | null;
   onSave: (server: McpServerInfo) => void;
   onCancel: () => void;
-  /** The server-side probe. The agent-scoped list runs it inside the
-   * agent's machine, so the form tests what will actually be started. */
-  probe?: (text: string) => Promise<McpTestResult>;
-  /** Whether a 401 may offer the OAuth flow. An agent's server is reached
-   * through its machine, where this app cannot finish a browser sign-in. */
-  allowAuth?: boolean;
 }) {
   const t = useT();
   const [name, setName] = useState(initial?.name ?? "");
@@ -166,7 +158,7 @@ export function McpDetail({
     setError(null);
     setTest({ key, status: "testing", tools: [] });
     try {
-      const answer = await probe(serializeMcpServers([draft]));
+      const answer = await api.testMcpServer(serializeMcpServers([draft]));
       setTest({
         key,
         status: answer.ok ? "ok" : "error",
@@ -340,15 +332,13 @@ export function McpDetail({
           </div>
         )}
 
-        {result?.status === "error" && (!result.needsAuth || !allowAuth) && (
+        {result?.status === "error" && !result.needsAuth && (
           <p className="error-text" style={{ margin: 0 }}>
-            {result.needsAuth
-              ? t("settings.mcp.authUnavailable")
-              : t("settings.mcp.testFailed", { error: result.error ?? "" })}
+            {t("settings.mcp.testFailed", { error: result.error ?? "" })}
           </p>
         )}
 
-        {result?.status === "error" && result.needsAuth && allowAuth && (
+        {result?.status === "error" && result.needsAuth && (
           <div className="stack-6">
             <p className="error-text" style={{ margin: 0 }}>
               {t("settings.mcp.authRequired")}
