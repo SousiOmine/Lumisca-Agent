@@ -32,6 +32,13 @@ export class AgentMachines {
       /** The desktops to drop whenever a container starts or stops: a
        * restarted container has no window manager. */
       screens: AgentScreens;
+      /** Make the agent's working folder inside a machine that just started.
+       * Every command starts in that folder (`podman exec --workdir`), and
+       * the OCI runtime refuses to start a process whose working folder does
+       * not exist. The folder therefore has to be made here, by the start
+       * itself: a machine started by a tool call never passes through
+       * ensureReady, and once it is up nothing asks again. */
+      ensureFolder: (agentId: string) => Promise<void>;
       /** The clock the idle window is measured with (tests drive it by hand). */
       now: () => number;
     },
@@ -122,6 +129,10 @@ export class AgentMachines {
       state.running = true;
       this.options.screens.forget(agentId);
       this.touch(agentId);
+      // Running is recorded first: the command that makes the folder goes
+      // through the exec seam, whose wake reads the flag and returns instead
+      // of starting the machine again.
+      await this.options.ensureFolder(agentId);
     }).finally(() => {
       state.starting = undefined;
     });

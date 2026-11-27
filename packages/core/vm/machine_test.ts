@@ -1,8 +1,14 @@
 import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
+import { vmMemoryPath } from "./agent-memory.ts";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
 import type { VmHost, VmHostStatus, VmManager, VmStatus } from "./container.ts";
-import { VM_WARM_FLOOR, vmContainerName } from "./contract.ts";
+import {
+  VM_WARM_FLOOR,
+  VM_WORKDIR,
+  vmAgentDir,
+  vmContainerName,
+} from "./contract.ts";
 import { StellaMachine } from "./machine.ts";
 import type { MachineRunners } from "./machine-seams.ts";
 
@@ -181,7 +187,8 @@ test("the exec seam wakes the agent's machine once and targets its container", a
   await exec!(["true"], { timeoutMs: 1000 });
   await exec!(["true"], { timeoutMs: 1000 });
   assertEquals(fake.starts, ["agent-a"]);
-  assertEquals(calls.length, 2);
+  // Three argv: the folder the start makes, then one per command.
+  assertEquals(calls.length, 3);
   for (const call of calls) {
     assertEquals(call.includes(vmContainerName("agent-a")), true);
     // The display and the session bus are the container's own environment:
@@ -195,7 +202,30 @@ test("two agents get different machines", async () => {
   await stella.exec("agent-a")!(["true"], { timeoutMs: 1000 });
   await stella.exec("agent-b")!(["true"], { timeoutMs: 1000 });
   assertEquals(fake.starts, ["agent-a", "agent-b"]);
-  assertEquals(calls[1]!.includes(vmContainerName("agent-b")), true);
+  assertEquals(calls.at(-1)!.includes(vmContainerName("agent-b")), true);
+});
+
+test("a machine started by a tool call gets its working folder first", async () => {
+  const { stella, calls } = machine();
+  const exec = stella.exec("agent-a")!;
+  await exec(["true"], { timeoutMs: 1000 });
+  await exec(["true"], { timeoutMs: 1000 });
+  // A command starts in the agent's folder, so a machine that came up without
+  // one answers the OCI runtime's chdir error on every call instead of
+  // running anything. The start makes the folder, once, before the command
+  // that needed it — and not again on the calls after it, because the machine
+  // is already up.
+  const made = calls.filter((call) =>
+    call.includes('mkdir -p -- "$1" && { [ -e "$2" ] || : > "$2"; }'),
+  );
+  assertEquals(made.length, 1);
+  assertEquals(calls[0], made[0]);
+  // The creating command cannot start in the folder it creates: it runs in the
+  // machine's home and names both paths as arguments.
+  const [folder] = made;
+  assertEquals(folder![folder!.indexOf("--workdir") + 1], VM_WORKDIR);
+  assertEquals(folder!.includes(vmAgentDir("agent-a")), true);
+  assertEquals(folder!.includes(vmMemoryPath("agent-a")), true);
 });
 
 test("callers racing on a sleeping machine share one wake", async () => {

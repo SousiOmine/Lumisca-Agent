@@ -104,6 +104,7 @@ export class StellaMachine {
       // sessions supplies it after this machine was built.
       busy: () => this.#busy,
       screens: this.#screens,
+      ensureFolder: (agentId) => this.ensureAgentFolder(agentId),
       now,
     });
     this.#seams = new MachineSeams({
@@ -206,22 +207,18 @@ export class StellaMachine {
    * every tool would then answer podman's "container state improper" for the
    * rest of the run. One fresh read per prompt is what that costs.
    *
+   * The working folder is not this method's business: a machine this call has
+   * to start gets it from the start itself (see AgentMachines.wake), so a
+   * wake reached by a tool call makes the folder too.
+   *
    * Idempotent and safe to call concurrently: callers racing on a sleeping
    * machine share one start.
    */
   async ensureReady(agentId: string): Promise<void> {
     const host = this.require();
     const status = await host.machine(agentId).status({ fresh: true });
-    const wasRunning = status.state === "running";
-    this.#agents.setRunning(agentId, wasRunning);
+    this.#agents.setRunning(agentId, status.state === "running");
     await this.#agents.wake(agentId);
-    if (!wasRunning) {
-      // The machine just came up: its working folder does not exist yet, and
-      // a run's first `bash` would fail on the missing workdir. Done here
-      // rather than on every prompt because a wake is the only moment it can
-      // be missing.
-      await this.ensureAgentFolder(agentId);
-    }
     this.#agents.touch(agentId);
   }
 
