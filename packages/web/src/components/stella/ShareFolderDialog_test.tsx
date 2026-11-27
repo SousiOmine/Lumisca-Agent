@@ -3,7 +3,7 @@ import { assert, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../../i18n.ts";
-import { ShareFolderDialog } from "./ShareFolderDialog.tsx";
+import { ShareFolderDialog, ShareTermsPicker } from "./ShareFolderDialog.tsx";
 
 /** The two storage methods the dialog's list uses. */
 function memoryStorage(initial: string | null) {
@@ -68,4 +68,19 @@ test("ShareFolderDialog: a recent folder is one press, with its last terms", () 
   assertStringIncludes(html, "読み書き");
   // The path is there for a reader who has two folders of the same name.
   assertStringIncludes(html, 'title="/Users/me/notes"');
+});
+
+test("ShareTermsPicker: the two terms are one control, split in half", () => {
+  initLocale("ja");
+  const html = renderToString(
+    createElement(ShareTermsPicker, { write: true, onChange: () => {} }),
+  );
+  // One group, two halves: a reader hears the choice, not two checkboxes.
+  assertStringIncludes(html, 'role="radiogroup"');
+  assertStringIncludes(html, 'aria-label="アクセス"');
+  assert(html.match(/role="radio"/g)?.length === 2, html);
+  // The filled half is the one in force: read and write here.
+  const checked = html.indexOf('aria-checked="true"');
+  assert(checked > html.indexOf("読み取りのみ"), html);
+  assert(checked < html.indexOf("読み書き"), html);
 });

@@ -138,15 +138,44 @@
   overflow-wrap: anywhere;
 }
 
-/* The dialog's labels are column stacks (modals.css: a field's name above
- * its input). These three are one line each: the box and what it allows. The
- * selector carries `.modal` to win over that rule. */
-.modal .stella-share-choice {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
+/* The two terms are one control, not two rows: the pair is a capsule split
+ * in half, with the half in force filled in. The track is the second surface
+ * so the capsule keeps an edge on the dialog's own sheet, and the chosen half
+ * rises to the third step of the ramp, which is the lighter one in the dark
+ * theme and the deeper one in the light. */
+.stella-terms-picker {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+}
+
+.stella-terms-option {
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
+  color: var(--text-dim);
   font-size: var(--type-13);
+  line-height: 1.4;
+  transition:
+    background var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.stella-terms-option:hover:not(:disabled) {
   color: var(--text);
+}
+
+.stella-terms-option.selected {
+  background: var(--surface-3);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.stella-terms-option:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .stella-share-note {

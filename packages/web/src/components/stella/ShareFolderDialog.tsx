@@ -25,6 +25,50 @@ export interface ShareGrantView {
   group?: string | null;
 }
 
+/**
+ * The two terms side by side, as one control.
+ *
+ * A read-only loan and a read-write one are the same decision made twice, so
+ * the pair is drawn as a split capsule: one track, two halves, and the half
+ * that is in force filled in. Two separate radio rows read like two settings
+ * and made the reader check one to find out it was already the other. The
+ * buttons keep the radiogroup semantics, as the question panel's options do.
+ */
+export function ShareTermsPicker({
+  write,
+  onChange,
+  disabled = false,
+}: {
+  write: boolean;
+  onChange: (write: boolean) => void;
+  /** While a loan is being made: the terms must not move under the press. */
+  disabled?: boolean;
+}) {
+  const t = useT();
+  const half = (value: boolean, label: string) => (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={write === value}
+      className={`stella-terms-option${write === value ? " selected" : ""}`}
+      disabled={disabled}
+      onClick={() => onChange(value)}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div
+      className="stella-terms-picker"
+      role="radiogroup"
+      aria-label={t("chat.stella.share.terms")}
+    >
+      {half(false, t("chat.stella.share.readOnly"))}
+      {half(true, t("chat.stella.share.readWrite"))}
+    </div>
+  );
+}
+
 export interface ShareFolderDialogProps {
   /** The conversation's server-side session id: the loan is made to it, and
    * the shell passes it to the lending child unchanged. */
@@ -174,26 +218,11 @@ export function ShareFolderDialog({
               <p className="stella-share-hint">
                 {t("chat.stella.share.computer.hint")}
               </p>
-              <label className="stella-share-choice">
-                <input
-                  type="radio"
-                  name="stella-share-computer-write"
-                  checked={!computerWrite}
-                  disabled={computerBusy}
-                  onChange={() => setComputerWrite(false)}
-                />
-                {t("chat.stella.share.readOnly")}
-              </label>
-              <label className="stella-share-choice">
-                <input
-                  type="radio"
-                  name="stella-share-computer-write"
-                  checked={computerWrite}
-                  disabled={computerBusy}
-                  onChange={() => setComputerWrite(true)}
-                />
-                {t("chat.stella.share.readWrite")}
-              </label>
+              <ShareTermsPicker
+                write={computerWrite}
+                onChange={setComputerWrite}
+                disabled={computerBusy}
+              />
               {idle !== null && (
                 <p className="stella-share-note">
                   {idle === "never"
@@ -241,24 +270,7 @@ export function ShareFolderDialog({
                 {selected.name}
                 <span className="stella-share-origin">{selected.path}</span>
               </p>
-              <label className="stella-share-choice">
-                <input
-                  type="radio"
-                  name="stella-share-write"
-                  checked={!write}
-                  onChange={() => setWrite(false)}
-                />
-                {t("chat.stella.share.readOnly")}
-              </label>
-              <label className="stella-share-choice">
-                <input
-                  type="radio"
-                  name="stella-share-write"
-                  checked={write}
-                  onChange={() => setWrite(true)}
-                />
-                {t("chat.stella.share.readWrite")}
-              </label>
+              <ShareTermsPicker write={write} onChange={setWrite} />
               {idle !== null && (
                 <p className="stella-share-note">
                   {idle === "never"

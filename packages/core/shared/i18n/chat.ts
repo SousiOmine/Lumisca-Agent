@@ -580,6 +580,12 @@ export const chat = {
     ja: "最近接続したフォルダー",
     en: "Recently shared",
   },
+  /** The pair's shared name: the two halves are one choice, and a screen
+   * reader announcing them needs to say what is being chosen. */
+  "chat.stella.share.terms": {
+    ja: "アクセス",
+    en: "Access",
+  },
   "chat.stella.share.readOnly": {
     ja: "読み取りのみ",
     en: "Read only",
