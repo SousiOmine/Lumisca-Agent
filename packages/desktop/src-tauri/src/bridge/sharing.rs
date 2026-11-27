@@ -47,10 +47,7 @@ pub(super) fn grant_computer(app: &AppHandle, params: &Params) -> BridgeReply {
 
     let roots = share::detect_computer_roots();
     if roots.is_empty() {
-        return bridge_error(
-            StatusCode::BAD_REQUEST,
-            "貸せる場所が見つかりませんでした",
-        );
+        return bridge_error(StatusCode::BAD_REQUEST, "貸せる場所が見つかりませんでした");
     }
     let places = roots
         .iter()
