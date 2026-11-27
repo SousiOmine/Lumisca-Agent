@@ -23,9 +23,7 @@ export const SHELL_ACTIONS = [
   "share/pick-folder",
   "share/grant",
   "share/revoke",
-  // The whole computer: its places, one loan over all of them, and the way
-  // to withdraw that loan at once.
-  "share/computer-roots",
+  // The whole computer as one loan, and the way to withdraw it at once.
   "share/grant-computer",
   "share/revoke-group",
   // How long a loan survives without use (Settings → アプリ).

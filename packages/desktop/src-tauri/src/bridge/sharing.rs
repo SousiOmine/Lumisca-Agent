@@ -34,41 +34,27 @@ pub(super) fn grant(app: &AppHandle, params: &Params) -> BridgeReply {
     }
 }
 
-/// The places a whole-computer loan may cover on this machine. The page
-/// cannot enumerate them itself: it is served by the (possibly remote)
-/// server, and the disk is here.
-pub(super) fn computer_roots() -> BridgeReply {
-    bridge_json(
-        StatusCode::OK,
-        serde_json::json!({ "roots": share::detect_computer_roots() }),
-    )
-}
-
-/// Lend this computer as one loan: every place the user checked, under one
+/// Lend this computer as one loan: every place the shell can see, under one
 /// group id.
 ///
-/// The page draws the list, but the consent is confirmed here, because the
-/// disk is the shell's. The confirmation names every place it covers and
-/// says what a loan allows before anything is lent.
+/// The page says only "this computer"; the places are enumerated here,
+/// because the disk is the shell's and the page may be served by a remote
+/// machine. The confirmation names every place the loan covers and says what
+/// it allows before anything is lent.
 pub(super) fn grant_computer(app: &AppHandle, params: &Params) -> BridgeReply {
-    let Some(roots) = params.get("roots") else {
-        return bridge_error(StatusCode::BAD_REQUEST, "roots required");
-    };
-    let paths: Vec<String> = roots
-        .split('\n')
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
-        .map(str::to_string)
-        .collect();
-    if paths.is_empty() {
-        return bridge_error(StatusCode::BAD_REQUEST, "貸す場所が選ばれていません");
-    }
     let session_id = params.get("sessionId").unwrap_or_default();
     let write = params.get("write").as_deref() == Some("1");
 
-    let places = paths
+    let roots = share::detect_computer_roots();
+    if roots.is_empty() {
+        return bridge_error(
+            StatusCode::BAD_REQUEST,
+            "貸せる場所が見つかりませんでした",
+        );
+    }
+    let places = roots
         .iter()
-        .map(|path| format!("・{path}"))
+        .map(|root| format!("・{}", root.path))
         .collect::<Vec<_>>()
         .join("\n");
     let text = format!(
@@ -84,7 +70,7 @@ pub(super) fn grant_computer(app: &AppHandle, params: &Params) -> BridgeReply {
         return bridge_error(StatusCode::BAD_REQUEST, "貸出をキャンセルしました");
     }
 
-    match share::grant_computer(app, &session_id, &paths, write) {
+    match share::grant_computer(app, &session_id, write) {
         Ok(grants) => bridge_json(
             StatusCode::OK,
             serde_json::json!({ "ok": true, "grants": grants }),

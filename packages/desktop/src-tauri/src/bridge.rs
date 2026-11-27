@@ -111,7 +111,6 @@ pub(crate) fn handle_shell_action(
         "share/pick-folder" => sharing::pick_folder(app),
         "share/grant" => sharing::grant(app, &params),
         "share/revoke" => sharing::revoke(app, &params),
-        "share/computer-roots" => sharing::computer_roots(),
         "share/grant-computer" => sharing::grant_computer(app, &params),
         "share/revoke-group" => sharing::revoke_group(app, &params),
         "share/idle" => sharing::idle(app),

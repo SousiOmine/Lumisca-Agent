@@ -162,42 +162,20 @@
   margin-top: 6px;
 }
 
-/* The whole-computer half of the dialog: the places the shell can lend, as
- * a checklist above the one-folder picker. */
+/* The whole-computer half of the dialog: one press, above the one-folder
+ * picker. */
 .stella-share-computer {
   margin-bottom: 16px;
 }
 
-.stella-share-roots {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+/* One action, the width of the sheet: this is the whole-computer loan, and
+ * a long label pushed to the right reads like a secondary button. */
+.stella-share-computer .stella-share-actions {
+  display: block;
 }
 
-.stella-share-root {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: var(--type-13);
-  cursor: pointer;
-}
-
-/* The dialog's labels stack by default (modals.css). A place is one line:
- * the box, its name, and the path the agent will address. */
-.modal .stella-share-root {
-  flex-direction: row;
-  color: var(--text);
-}
-
-.stella-share-root .stella-share-origin {
-  margin-left: auto;
-  max-width: 45%;
+.stella-share-computer .stella-share-actions .btn {
+  width: 100%;
 }
 
 .stella-share-divider {

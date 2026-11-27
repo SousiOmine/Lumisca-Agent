@@ -305,29 +305,16 @@ pub(crate) fn grant(
 pub(crate) fn grant_computer(
     app: &AppHandle,
     session_id: &str,
-    roots: &[String],
     write: bool,
 ) -> Result<Vec<ShareGrantView>, String> {
-    if roots.is_empty() {
-        return Err("貸す場所が選ばれていません".to_string());
-    }
     let allowed = detect_computer_roots();
-    let mut folders: Vec<String> = Vec::new();
-    for root in roots {
-        let folder = lendable_folder(root)?;
-        let known = allowed
-            .iter()
-            .any(|candidate| simplify(PathBuf::from(&candidate.path)) == folder);
-        if !known {
-            return Err(format!("このパソコンのルートではありません: {folder}"));
-        }
-        if !folders.iter().any(|known| known == &folder) {
-            folders.push(folder);
-        }
+    if allowed.is_empty() {
+        return Err("貸せる場所が見つかりませんでした".to_string());
     }
     let group = format!("pc-{}", server::generate_token());
-    let mut grants = Vec::with_capacity(folders.len());
-    for folder in folders {
+    let mut grants = Vec::with_capacity(allowed.len());
+    for root in allowed {
+        let folder = lendable_folder(&root.path)?;
         grants.push(grant_at(app, session_id, &folder, write, Some(&group))?);
     }
     server_log::note(

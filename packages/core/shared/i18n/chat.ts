@@ -549,24 +549,16 @@ export const chat = {
    * macOS and Linux. The shell enumerates the places; this is the heading of
    * the list it filled. */
   "chat.stella.share.computer.title": {
-    ja: "このパソコン全体",
-    en: "This whole computer",
+    ja: "このパソコン",
+    en: "This computer",
   },
   "chat.stella.share.computer.hint": {
-    ja: "選んだ場所を、この会話のエージェントが使えるようにします。コマンドもこのユーザーとして実行できます。",
-    en: "Let this conversation's agent use the places below. It can also run commands as you.",
-  },
-  "chat.stella.share.computer.everything": {
-    ja: "すべてのファイル",
-    en: "All files",
-  },
-  "chat.stella.share.computer.none": {
-    ja: "接続できる場所が見つかりません。",
-    en: "No place to lend was found.",
+    ja: "このパソコン全体を、この会話のエージェントが使えるようにします。コマンドもこのユーザーとして実行できます。",
+    en: "Let this conversation's agent use this whole computer. It can also run commands as you.",
   },
   "chat.stella.share.computer.lend": {
-    ja: "このパソコンを接続",
-    en: "Share this computer",
+    ja: "PC全体へのアクセスを共有",
+    en: "Share access to this whole PC",
   },
   "chat.stella.share.computer.lending": {
     ja: "接続しています…",
@@ -575,10 +567,6 @@ export const chat = {
   "chat.stella.share.computer.failed": {
     ja: "接続できませんでした: {error}",
     en: "Could not share: {error}",
-  },
-  "chat.stella.share.computer.disconnect": {
-    ja: "まとめて切断",
-    en: "Disconnect all",
   },
   "chat.stella.share.computer.disconnectFailed": {
     ja: "切断できませんでした: {error}",
