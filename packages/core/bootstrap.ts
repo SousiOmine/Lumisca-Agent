@@ -122,6 +122,9 @@ export interface CoreServicesDeps {
   modelService: ModelService;
   webSearch: WebSearchService;
   mcp: McpService;
+  /** For per-agent settings a service must remove with its owner (a
+   * deleted agent's MCP config). */
+  settings: SettingsRepo;
 
   decorateSession(session: SessionInfo): SessionInfo;
   emit(event: ClientEvent): void;
@@ -204,6 +207,7 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
     language: deps.language,
     emit: deps.emit,
     prepareAgentFolder: (agentId) => machines.prepareAgentFolder(agentId),
+    settings: deps.settings,
     removeAgentMachine: (agentId) => machines.removeAgentMachine(agentId),
     stopAgentMachine: (agentId) => machines.stopAgentMachine(agentId),
     modelExists: (provider, modelId) =>
@@ -647,6 +651,7 @@ export function createCoreGraph(
       deleteSession: (id) => host.deleteSession(id),
     });
   graph.services = createCoreServices({
+    settings: graph.settings,
     machine: graph.stella,
     agents: graph.stellaAgents,
     sessions: graph.sessions,
