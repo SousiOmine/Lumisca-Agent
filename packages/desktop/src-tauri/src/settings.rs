@@ -250,11 +250,7 @@ mod tests {
     #[test]
     fn an_explicit_null_turns_the_idle_clock_off() {
         let file = TempFile::new("idle-never");
-        std::fs::write(
-            &file.0,
-            r#"{"autoUpdate":true,"shareIdleMinutes":null}"#,
-        )
-        .unwrap();
+        std::fs::write(&file.0, r#"{"autoUpdate":true,"shareIdleMinutes":null}"#).unwrap();
         assert_eq!(load_from(&file.0).share_idle_minutes, None);
     }
 
