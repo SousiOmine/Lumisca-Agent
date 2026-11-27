@@ -109,7 +109,14 @@ const actionSchema = object({
       "Clicks to perform: 1 (default), 2 (double-click), 3 (triple-click)",
     ),
   ),
-  text: optional(string("Text to type (type only)")),
+  text: optional(
+    string(
+      "Text to type (type only). Printable ASCII goes through the keyboard; " +
+        "any other character, Japanese included, is pasted through the " +
+        "machine's clipboard, so the focused application must paste with " +
+        "Ctrl+V. Line breaks and tabs are sent as Return and Tab.",
+    ),
+  ),
   key: optional(
     string(
       "Key or key combination by xdotool name, e.g. `Return`, `Escape`, " +

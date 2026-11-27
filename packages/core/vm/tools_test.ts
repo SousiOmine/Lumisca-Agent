@@ -10,7 +10,7 @@ import {
   VM_SCREEN_WIDTH,
   VM_SKILLS_DIR,
 } from "./contract.ts";
-import { createVmScreen, scrollNotches } from "./screen.ts";
+import { createVmScreen, scrollNotches, typeSegments } from "./screen.ts";
 import { scanVmSkillsDir } from "./skills.ts";
 import { createVmTools } from "./tools.ts";
 
@@ -457,6 +457,94 @@ test("vm tools: act builds the xdotool call for each action", async () => {
     joined.some((c) => c.includes("type --clearmodifiers")),
     joined.join("\n"),
   );
+});
+
+/** A machine whose clipboard is whatever the last xclip write put there. */
+function clipboardMachine(initial: string) {
+  let clip = initial;
+  const calls: string[][] = [];
+  const answer = (stdout: string): VmCommandResult => ({
+    exitCode: 0,
+    stdout,
+    stderr: "",
+    truncated: false,
+    timedOut: false,
+  });
+  const run: VmExec = (command, options) => {
+    const argv = [...command];
+    calls.push(argv);
+    const joined = argv.join(" ");
+    if (joined.startsWith("xclip -i ")) {
+      const input = options.stdin;
+      if (input instanceof Uint8Array) clip = new TextDecoder().decode(input);
+      return Promise.resolve(answer(""));
+    }
+    if (joined.startsWith("xclip -o ")) return Promise.resolve(answer(clip));
+    return Promise.resolve(answer(""));
+  };
+  return { run, calls, clipboard: () => clip };
+}
+
+const screenOn = (run: VmExec) =>
+  createVmScreen({
+    exec: run,
+    execBytes: (() =>
+      Promise.resolve({
+        exitCode: 0,
+        stdout: new Uint8Array(),
+        stderr: "",
+        truncated: false,
+        timedOut: false,
+      })) satisfies VmExecBytes,
+  });
+
+test("vm tools: a typed string is split by what each route carries", () => {
+  assertEquals(typeSegments("aあb\n\tc\r\nd"), [
+    { kind: "type", text: "a" },
+    { kind: "paste", text: "あ" },
+    { kind: "type", text: "b" },
+    { kind: "key", key: "Return" },
+    { kind: "key", key: "Tab" },
+    { kind: "type", text: "c" },
+    { kind: "key", key: "Return" },
+    { kind: "type", text: "d" },
+  ]);
+});
+
+test("vm tools: Japanese is pasted, because the keycodes drop it", async () => {
+  const machine = clipboardMachine("前のテキスト");
+  await screenOn(machine.run).type("こんにちは", undefined);
+  const sent = machine.calls.map((call) => call.join(" "));
+  // The keyboard path is what lost four of seven characters in Chromium.
+  assert(
+    !sent.some((call) => call.startsWith("xdotool type")),
+    sent.join("\n"),
+  );
+  assert(
+    sent.includes("xdotool key --clearmodifiers -- ctrl+v"),
+    sent.join("\n"),
+  );
+  assert(
+    machine.calls.some((call) => call.join(" ").startsWith("xclip -i ")),
+    sent.join("\n"),
+  );
+  // The clipboard held the user's own text and gets it back.
+  assertEquals(machine.clipboard(), "前のテキスト");
+});
+
+test("vm tools: a mixed string keeps its order across both routes", async () => {
+  const machine = clipboardMachine("");
+  await screenOn(machine.run).type("aあb", undefined);
+  const sent = machine.calls.map((call) => call.join(" "));
+  const typed = sent.findIndex((call) => call.startsWith("xdotool type"));
+  const pasted = sent.indexOf("xdotool key --clearmodifiers -- ctrl+v");
+  const typedAfter = sent.findIndex(
+    (call, index) => index > pasted && call.startsWith("xdotool type"),
+  );
+  assert(typed !== -1 && pasted !== -1 && typedAfter !== -1, sent.join("\n"));
+  assert(typed < pasted && pasted < typedAfter, sent.join("\n"));
+  assert(sent[typed]?.endsWith("-- a"), sent.join("\n"));
+  assert(sent[typedAfter]?.endsWith("-- b"), sent.join("\n"));
 });
 
 test("vm tools: scroll needs an amount", async () => {

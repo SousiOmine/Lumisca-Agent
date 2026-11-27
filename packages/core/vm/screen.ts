@@ -9,6 +9,7 @@
  * never resized: what the agent sees is 1:1 with what it clicks.
  */
 
+import { createVmClipboard, type VmClipboard } from "./clipboard.ts";
 import type { VmExec, VmExecBytes } from "./container.ts";
 import {
   VM_SCREEN_HEIGHT,
@@ -23,6 +24,12 @@ const SCREENSHOT_MAX_BYTES = 16 * 1024 * 1024;
 
 /** Input actions are quick; a hung X server must not stall the run. */
 const ACTION_TIMEOUT_MS = 20_000;
+
+/** How long xclip gets to take the selection before the paste key is sent,
+ * and how long the application gets to read it before the clipboard is put
+ * back. Both are the waits a11y.py uses for the same two steps. */
+const PASTE_SETTLE_MS = 200;
+const PASTE_READ_MS = 300;
 
 /** xdotool's button numbers. Its `click` and `mousedown` commands take a
  * NUMBER, not a name: `xdotool click left` reads "left" as 0 and the X server
@@ -89,6 +96,9 @@ export interface VmScreenOptions {
   /** Text-command seam (xdotool) — the same one the file and shell backends
    * use. */
   exec: VmExec;
+  /** The machine's clipboard, for text the keyboard cannot carry. Built on
+   * `exec` when it is not given. */
+  clipboard?: VmClipboard;
   /** Byte-command seam: a capture must not pass through a text decode. */
   execBytes: VmExecBytes;
 }
@@ -165,8 +175,106 @@ function requireOnScreen(x: number, y: number): void {
   }
 }
 
+/** The characters xdotool can print: the X keyboard map carries printable
+ * ASCII and nothing else. A character outside it is sent by xdotool through a
+ * temporary keycode, and Chromium drops some of those — a seven-character
+ * Japanese word arrived with four of them missing. */
+function printedByXdotool(character: string): boolean {
+  const code = character.charCodeAt(0);
+  return code >= 32 && code <= 126;
+}
+
+/** One piece of a typed string, and the way it goes out. `type` is printable
+ * ASCII through the keyboard, `paste` is everything else through the
+ * clipboard, and `key` is a line break or a tab, which are keys rather than
+ * text in a field. */
+export type VmTypeSegment =
+  | { kind: "type"; text: string }
+  | { kind: "paste"; text: string }
+  | { kind: "key"; key: string };
+
+/**
+ * Split a string into the pieces each route can carry.
+ *
+ * The order is the string's order, so a mixed sentence arrives as written.
+ * Adjacent characters of the same route are joined: one clipboard write per
+ * run, not per character, and one xdotool call per typed run.
+ *
+ * A line break is Return rather than a pasted character. That is what
+ * xdotool type did with it, and it is what submits a form or starts a line;
+ * a pasted newline would do nothing in a single-line field. A tab is Tab for
+ * the same reason.
+ */
+export function typeSegments(text: string): VmTypeSegment[] {
+  const segments: VmTypeSegment[] = [];
+  const addText = (kind: "type" | "paste", value: string): void => {
+    const last = segments.at(-1);
+    if (last !== undefined && last.kind === kind) {
+      last.text += value;
+      return;
+    }
+    segments.push({ kind, text: value });
+  };
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index] as string;
+    if (character === "\r") {
+      // A Windows line ending is one Return, not two.
+      if (text[index + 1] === "\n") index += 1;
+      segments.push({ kind: "key", key: "Return" });
+      continue;
+    }
+    if (character === "\n") {
+      segments.push({ kind: "key", key: "Return" });
+      continue;
+    }
+    if (character === "\t") {
+      segments.push({ kind: "key", key: "Tab" });
+      continue;
+    }
+    addText(printedByXdotool(character) ? "type" : "paste", character);
+  }
+  return segments;
+}
+
+function paused(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function createVmScreen(options: VmScreenOptions): VmScreen {
   const { exec } = options;
+  const clipboard = options.clipboard ?? createVmClipboard({ exec });
+
+  /**
+   * Send text the keyboard cannot carry: put it on the clipboard, press the
+   * paste key, and put the old clipboard back.
+   *
+   * The clipboard is the machine's own, which the chat's screen pane also
+   * exchanges text with, so the text found there is restored as soon as the
+   * paste lands. A paste is the only route that carries a character the X
+   * keyboard map lacks, and it is what the in-machine helper's field write
+   * already uses. The application must paste with Ctrl+V for this to arrive.
+   */
+  const paste = async (
+    text: string,
+    signal: AbortSignal | undefined,
+  ): Promise<void> => {
+    // A clipboard that cannot be read is one there is nothing to restore;
+    // the write below is what reports a machine that cannot take the text.
+    const previous = await clipboard.read(signal).catch(() => "");
+    await clipboard.write(text, signal);
+    // xclip forks a process that keeps serving the selection, so the paste
+    // key goes out after it has taken ownership.
+    await paused(PASTE_SETTLE_MS);
+    await xdotool(exec, ["key", "--clearmodifiers", "--", "ctrl+v"], signal);
+    // Restoring before the application has read the selection would paste
+    // the restored text instead of this one.
+    await paused(PASTE_READ_MS);
+    if (previous !== "" && previous !== text) {
+      // Best effort: the text already arrived, and a failed restore must not
+      // report the typing as failed.
+      await clipboard.write(previous, signal).catch(() => {});
+    }
+  };
 
   return {
     async screenshot(region, signal) {
@@ -264,14 +372,30 @@ export function createVmScreen(options: VmScreenOptions): VmScreen {
 
     async type(text, signal) {
       if (text.length === 0) return;
-      // `--clearmodifiers` keeps a modifier left over from a previous key
-      // press from mangling the text; `--delay` gives the target application
-      // time to keep up with fast input.
-      await xdotool(
-        exec,
-        ["type", "--clearmodifiers", "--delay", "12", "--", text],
-        signal,
-      );
+      // Each run goes the way that can carry it: printable ASCII through the
+      // keyboard, anything else through the clipboard (see typeSegments).
+      for (const segment of typeSegments(text)) {
+        if (segment.kind === "paste") {
+          await paste(segment.text, signal);
+          continue;
+        }
+        if (segment.kind === "key") {
+          await xdotool(
+            exec,
+            ["key", "--clearmodifiers", "--", segment.key],
+            signal,
+          );
+          continue;
+        }
+        // `--clearmodifiers` keeps a modifier left over from a previous key
+        // press from mangling the text; `--delay` gives the target
+        // application time to keep up with fast input.
+        await xdotool(
+          exec,
+          ["type", "--clearmodifiers", "--delay", "12", "--", segment.text],
+          signal,
+        );
+      }
     },
 
     async key(key, signal) {
