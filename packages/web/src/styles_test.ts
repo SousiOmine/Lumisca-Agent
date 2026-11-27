@@ -1753,6 +1753,23 @@ test("a section's action keeps the right edge, heading or not", async () => {
   assertEquals(heading.get("flex"), "1");
 });
 
+test("a settings pane keeps the height its rows need", async () => {
+  // A pane that grows by itself split the page's spare height with the next
+  // pane, so the second group of rows started half a page down: on アプリ the
+  // app-info section sat far below the send-key row. Only the pane that is
+  // meant to fill its page (`.settings-fill`) grows.
+  const settings = await fsp.readFile(
+    new URL("./styles/settings.css", import.meta.url),
+    "utf8",
+  );
+  const rules = cssRules(settings);
+  assertEquals(declarations(rules, ".settings-pane").has("flex"), false);
+  assertEquals(
+    declarations(rules, ".settings-pane.settings-fill").get("flex"),
+    "1",
+  );
+});
+
 test("a routine's state stays on its name's line", async () => {
   // A stopped routine's badge wrapped under a long name and was read as part
   // of the line below: the row looked like one that still runs. The title row

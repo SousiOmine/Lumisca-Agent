@@ -186,9 +186,12 @@
   text-overflow: ellipsis;
 }
 
-/* personalization panel */
+/* A panel's stack of rows and sections. It takes the height its content
+ * needs: a pane that grows by itself split the page's spare height with the
+ * next pane, and the second group of rows then began half a page down. Only
+ * `.settings-fill` (below) grows, for the one page whose single control is
+ * meant to fill the body. */
 .settings-pane {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 10px;
