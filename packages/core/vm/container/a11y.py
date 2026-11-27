@@ -538,17 +538,27 @@ def cmd_get(request):
 
 def cmd_do(request):
     """Act on a ref, then report what could be read back."""
-    app, node, _path = resolve(request)
+    app, node, path = resolve(request)
     action = require(request, "action")
     before = state_flags(node)
     role = node.getRoleName()
+    # The identity is read BEFORE the action: an action can rename the
+    # element (a button that says "Send" becomes "Sending..."), and the read
+    # back then has to look for what the ref named, not what it says now.
+    name = node.name or ""
+    box = bounds_of(node)
 
     if action == "click":
         outcome = activate(node, app)
     elif action == "focus":
         outcome = focus(node)
     elif action == "set_value":
-        outcome = set_value(node, require(request, "value"))
+        # An empty value is a request to clear the field, not a missing
+        # argument: "write nothing here" is how a form is reset.
+        value = request.get("value")
+        if not isinstance(value, str):
+            raise ValueError("value is required")
+        outcome = set_value(node, value)
     elif action == "key":
         outcome = run_xdotool(["key", "--clearmodifiers", "--", require(request, "key")])
     elif action in ("check", "uncheck"):
@@ -577,7 +587,7 @@ def cmd_do(request):
     # `delivered_unverified`, never as success: the app was told to do
     # something and the toolkit accepted it, which is not the same as a
     # visible effect.
-    after = read_back(app, role, node.name or "")
+    after = read_back(app, role, name, path, box)
     return {
         "ok": True,
         "action": action,
@@ -690,41 +700,154 @@ def focus(node):
 
 
 def _select_all(node):
-    """Select a field's contents so typing replaces them."""
+    """Select a field's contents so typing replaces them.
+
+    False means the node has no text to select: either it is not a text field
+    at all, or the toolkit will not say how much text it holds. An empty field
+    that answers with a Text interface returns True — there is nothing to
+    select, and nothing to replace either.
+    """
     try:
         text = node.queryText()
         count = text.characterCount
-        if count:
-            text.setSelection(0, 0, count)
-            return True
     except Exception:
-        pass
-    return False
+        return False
+    if count == 0:
+        return True
+    try:
+        text.setSelection(0, 0, count)
+    except Exception:
+        return False
+    return True
+
+
+def types_via_keyboard(value):
+    """Whether xdotool can type every character of `value`.
+
+    xdotool sends a character that the X keyboard map lacks by assigning a
+    temporary keycode. Chromium loses or reorders those characters: a
+    seven-character Japanese word arrived with four of them missing. The
+    clipboard carries any character intact, so printable ASCII takes the
+    keyboard and everything else takes the clipboard.
+    """
+    # A tab or a newline is a KEY to xdotool, not text: in a field it moves
+    # the focus or submits the form. Only printable ASCII is typed; anything
+    # else, including line breaks, is pasted.
+    return all(32 <= ord(character) <= 126 for character in value)
+
+
+def read_clipboard():
+    """The clipboard's text, or None when it holds no text.
+
+    `xclip -o` waits for an owner that never answers when the clipboard is
+    empty, so the read is bounded and a missing clipboard is not an error.
+    """
+    for target in ("UTF8_STRING", "STRING"):
+        try:
+            result = subprocess.run(
+                ["timeout", "2", "xclip", "-o", "-selection", "clipboard",
+                 "-t", target],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return None
+        if result.returncode == 0:
+            return result.stdout
+    return None
+
+
+def write_clipboard(value):
+    """Put `value` on the clipboard, or say why it did not arrive."""
+    # xclip forks a process that keeps serving the selection, and that child
+    # inherits the parent's streams. Writing to a pipe here would therefore
+    # wait for a process that is meant to outlive the call, so the output goes
+    # to /dev/null and the exit code is the only answer.
+    try:
+        result = subprocess.run(
+            ["timeout", "5", "xclip", "-i", "-selection", "clipboard"],
+            input=value,
+            text=True,
+            timeout=8,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        return {"error": "xclip is missing from the machine's image"}
+    except (subprocess.TimeoutExpired, UnicodeError) as error:
+        return {"error": f"the clipboard could not take the text: {error}"}
+    if result.returncode != 0:
+        return {"error": "the clipboard did not take the text"}
+    return {"done": "clipboard"}
+
+
+def paste_value(value):
+    """Type `value` by pasting it, restoring the clipboard afterwards.
+
+    The clipboard is the machine's own, which the chat's screen pane also
+    writes the user's copied text to, so the previous text is put back as soon
+    as the paste lands. A previous clipboard that held no text cannot be
+    restored and is left holding the pasted value.
+    """
+    previous = read_clipboard()
+    written = write_clipboard(value)
+    if "error" in written:
+        return written
+    # xclip keeps a process alive to answer for the selection; give it a
+    # moment to take ownership before the key that reads it.
+    time.sleep(0.2)
+    result = run_xdotool(["key", "--clearmodifiers", "--", "ctrl+v"])
+    # Restoring before the application has read the selection would paste the
+    # restored text instead of the value.
+    time.sleep(0.3)
+    if previous is not None and previous != value:
+        write_clipboard(previous)
+    if "error" in result:
+        return result
+    return {"done": "clipboard"}
 
 
 def set_value(node, value):
     """Write text into a field.
 
-    Two routes, because a toolkit offers only one of them: GTK's fields have
-    `EditableText`, whose `setTextContents` writes the value directly, while a
-    web field exposes only `Text` and takes keyboard input. The keyboard route
-    focuses the field and selects what is there first, so the characters land
-    in the field and replace its contents rather than appending to whatever
-    had the focus.
+    Three routes, because toolkits differ. GTK's fields have `EditableText`,
+    whose `setTextContents` writes the value directly. A web field exposes
+    only `Text` and takes keyboard input. Characters xdotool cannot type
+    through the X keyboard map arrive through the clipboard.
+
+    The field is read back before the call reports success. A write that did
+    not land is an error naming what the field holds now, because a field left
+    with the wrong value must not look delivered.
     """
+    role = node.getRoleName()
     try:
         editable = node.queryEditableText()
-        if editable.isEditable(0):
-            editable.setTextContents(value)
-            return {"done": "EditableText"}
-    except NotImplementedError:
-        pass
     except Exception:
-        pass
+        editable = None
+    if editable is not None:
+        try:
+            if editable.isEditable(0):
+                editable.setTextContents(value)
+                return {"done": "EditableText"}
+        except NotImplementedError:
+            pass
+        except Exception as error:
+            return {"error": f"writing into the {role} failed: {error}"}
+
+    # Only a field that says it is editable takes typed text. Chromium's date
+    # input is a "date editor" holding three spin buttons and no Text
+    # interface; typing into it drops the digits into whichever segment has
+    # the caret, so 2027-03-04 became 02/02/270304 and nothing read that back.
+    if "editable" not in state_flags(node):
+        return {
+            "error": f"the {role} is not a text field: it reports no editable "
+            "text, so set_value will not type into it. Set it through its own "
+            "parts (vm_act on the segments, or the control's picker)."
+        }
 
     try:
-        component = node.queryComponent()
-        component.grabFocus()
+        node.queryComponent().grabFocus()
     except Exception:
         return {
             "error": "the field cannot take the focus, so no text can be "
@@ -737,30 +860,60 @@ def set_value(node, value):
         if "focused" in state_flags(node):
             break
         time.sleep(0.02)
-    # Select everything so the typing REPLACES the value instead of appending
-    # to it (a click in a field leaves the caret anywhere).
-    _select_all(node)
+    # Select everything so the write REPLACES the value rather than appending
+    # to it (a click in a field leaves the caret anywhere). Without a
+    # selection the field's old contents survive beside the new ones, and the
+    # caller has no way to tell that from a successful write.
+    if not _select_all(node):
+        return {
+            "error": f"the {role} offers no text selection, so its contents "
+            "cannot be replaced and a write would append to them. Clear it "
+            "first (vm_do key ctrl+a, then Delete) and retry."
+        }
     time.sleep(0.05)
-    result = run_xdotool(
-        ["type", "--clearmodifiers", "--delay", "20", "--", value]
-    )
-    if "error" in result:
-        return result
-    # Typing into a field that had a selection can drop a character when the
-    # key lands before the selection is applied; send Select-all once more and
-    # verify, retrying the whole write when the value did not arrive intact.
-    for _ in range(2):
-        time.sleep(0.15)
-        if text_of(node) == value:
-            return result
-        _select_all(node)
-        time.sleep(0.05)
-        result = run_xdotool(
-            ["type", "--clearmodifiers", "--delay", "30", "--", value]
-        )
+
+    if value == "":
+        # Selecting all leaves the old text in place until a key replaces it,
+        # and a write of nothing sends no key: Delete is what clears a field.
+        result = run_xdotool(["key", "--clearmodifiers", "--", "Delete"])
         if "error" in result:
             return result
-    return result
+        for _ in range(10):
+            time.sleep(0.05)
+            if text_of(node) == "":
+                return result
+        return {
+            "error": f"the {role} still holds {text_of(node)!r} after "
+            "clearing it"
+        }
+
+    readable = role != "password text"
+    held = ""
+    for attempt in range(2):
+        if attempt == 0 and types_via_keyboard(value):
+            result = run_xdotool(
+                ["type", "--clearmodifiers", "--delay", "20", "--", value]
+            )
+        else:
+            result = paste_value(value)
+        if "error" in result:
+            return result
+        if not readable:
+            return result
+        # A write lands asynchronously: the text is read once the toolkit has
+        # applied the input, not when xdotool exits.
+        for _ in range(10):
+            time.sleep(0.05)
+            held = text_of(node)
+            if held == value:
+                return result
+        _select_all(node)
+        time.sleep(0.05)
+    return {
+        "error": f"the {role} holds {held!r} after writing {value!r}: the "
+        "field did not take the whole value. Check its format, or write it "
+        "another way."
+    }
 
 
 def select_option(node, app, value):
@@ -884,25 +1037,27 @@ def run_xdotool(argv):
     return {"done": "xdotool"}
 
 
-def read_back(app, role, name):
+def read_back(app, role, name, path=None, bounds=None):
     """What the acted-on element says about itself now, or {} when it cannot
     be found again.
 
-    The element is looked up by IDENTITY in a fresh walk — same role, same
-    name — rather than at the path it had. An action changes the tree (a menu
-    closes and its row shows something else, a table re-sorts, a banner
-    appears), so the index chain that reached the element before the action
-    reaches a different element afterwards; reading that one would report a
-    neighbour's state as the target's. Nothing found means nothing is known,
-    which the caller reports as `delivered_unverified` instead of guessing.
+    The element is looked up by IDENTITY in a fresh walk rather than
+    assuming the tree stayed still. An action changes the tree (a menu closes
+    and its row shows something else, a table re-sorts, a banner appears), so
+    the index chain that reached the element before the action can reach a
+    different element afterwards; reading that one would report a neighbour's
+    state as the target's.
+
+    Three identities, strongest first: the name and role it had before the
+    action, the screen rectangle it occupied, and the path it was at. The
+    rectangle is what makes an UNNAMED field readable back at all — the
+    name-only lookup used to answer {} for every unnamed textarea, so a write
+    that succeeded was reported as unverified. Nothing found means nothing is
+    known, which the caller reports as `delivered_unverified` instead of
+    guessing.
     """
-    if name == "":
-        # An unnamed element cannot be re-identified after the tree moved.
-        return {}
-    nodes, _complete = walk(app)
-    for node, _path in nodes:
-        if node.getRoleName() != role or (node.name or "") != name:
-            continue
+
+    def record(node):
         states = state_flags(node)
         return {
             "name": node.name or "",
@@ -910,6 +1065,22 @@ def read_back(app, role, name):
             "states": states,
             "checked": "checked" in states,
         }
+
+    nodes, _complete = walk(app)
+    if name != "":
+        for node, _path in nodes:
+            if node.getRoleName() == role and (node.name or "") == name:
+                return record(node)
+    if bounds is not None:
+        for node, _path in nodes:
+            if node.getRoleName() != role:
+                continue
+            if bounds_of(node) == bounds:
+                return record(node)
+    if path is not None:
+        node = node_at(app, path)
+        if node is not None and node.getRoleName() == role:
+            return record(node)
     return {}
 
 

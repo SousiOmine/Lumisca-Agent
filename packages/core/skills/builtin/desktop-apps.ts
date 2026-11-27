@@ -102,8 +102,12 @@ vm_do    {ref: "@s…:e9", action: "click"}
 vm_wait  {app: "chromium", text: "Thank you", timeout_ms: 5000}
 \`\`\`
 
-- \`set_value\` writes a GTK field directly and types into a web field (it
-  focuses the field and replaces its contents). If it answers that the field
+- \`set_value\` writes a GTK field directly and types into a web field: it
+  focuses the field, selects what is there and replaces it. An element that
+  is not a text field is refused rather than typed into — the segments of a
+  date input, a read-only box — because the characters land in whichever
+  segment has the caret. When the field holds something other than the value
+  afterwards, the answer names what it holds. If it answers that the field
   cannot take the focus, click it first with \`vm_do action "focus"\`.
 - \`select\` takes the option's visible name. A miss lists the options offered.
 - \`check\` and \`uncheck\` are idempotent; the result says \`unchanged\` when
