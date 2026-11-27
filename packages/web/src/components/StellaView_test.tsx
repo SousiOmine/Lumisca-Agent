@@ -12,7 +12,7 @@ import type {
   StellaAgentSummary,
   StellaStatus,
 } from "../types.ts";
-import { StellaView } from "./StellaView.tsx";
+import { opensPaneForLoans, StellaView } from "./StellaView.tsx";
 
 /** One agent, so the header (and the screen toggle it holds) is drawn. The
  * other props are the App's job, not the subject. */
@@ -135,6 +135,19 @@ test("StellaView: a lent folder is named in the panel, with its way back", () =>
   assertStringIncludes(html, "/lend/proj");
   assertStringIncludes(html, "読み取りのみ");
   assertStringIncludes(html, "切断");
+});
+
+test("StellaView: a loan does not open the panel on a phone", () => {
+  // There the panel is the whole screen (stella.css), so opening it for a
+  // loan that was already in place would cover the conversation the reader
+  // just tapped; the title bar's toggle is the way in.
+  assertEquals(opensPaneForLoans(true, 1, false), false);
+  // The panel is a column beside the conversation on wider windows, so a
+  // new loan opens it there.
+  assertEquals(opensPaneForLoans(false, 1, false), true);
+  // Nothing lent, or the loan was already seen when the view mounted.
+  assertEquals(opensPaneForLoans(false, 0, false), false);
+  assertEquals(opensPaneForLoans(false, 1, true), false);
 });
 
 test("StellaView: a hand-over draws the pane whatever the caller chose", () => {

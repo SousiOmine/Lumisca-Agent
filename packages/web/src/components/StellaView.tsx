@@ -8,7 +8,7 @@ import {
   stellaUploadBase,
 } from "../api-client.ts";
 import { useAgentMachine } from "../hooks/useAgentMachine.ts";
-import { useReducedMotion } from "../hooks/useMediaQuery.ts";
+import { useNarrowViewport, useReducedMotion } from "../hooks/useMediaQuery.ts";
 import { usePresence } from "../hooks/usePresence.ts";
 import { useT } from "../i18n.ts";
 import { inDesktopShell } from "../shell.ts";
@@ -102,6 +102,23 @@ interface StellaViewProps {
   /** The user refused to lend one. */
   onDeclineShare: (toolCallId: string) => Promise<void>;
   onOpenSettings: () => void;
+}
+
+/** Whether an arriving loan should open the panel by itself.
+ *
+ * Opening it is what shows the lent folder and the way to take it back. A
+ * phone has no room for it beside the conversation: there the panel is the
+ * whole screen, so opening it by itself covers the conversation the reader
+ * just tapped and the only way on is its close button. The title bar's
+ * toggle still opens it there. `hadLoans` is what the view saw last time,
+ * so a loan that was already there when the conversation arrived is not
+ * announced a second time. */
+export function opensPaneForLoans(
+  narrow: boolean,
+  loans: number,
+  hadLoans: boolean,
+): boolean {
+  return !narrow && loans > 0 && !hadLoans;
 }
 
 /**
@@ -234,11 +251,14 @@ export function StellaView({
   // folder and the way to take it back. Only on the way in — closing the
   // panel while a folder is lent is the reader's choice, and this must not
   // reopen it under them.
+  const narrow = useNarrowViewport();
   const lentBefore = useRef(shares.length > 0);
   useEffect(() => {
-    if (shares.length > 0 && !lentBefore.current) onScreenOpenChange(true);
+    if (opensPaneForLoans(narrow, shares.length, lentBefore.current)) {
+      onScreenOpenChange(true);
+    }
     lentBefore.current = shares.length > 0;
-  }, [shares.length, onScreenOpenChange]);
+  }, [narrow, shares.length, onScreenOpenChange]);
   // The screen is the user's while the agent waits for them: the pane turns
   // interactive and a bar above it says what to do and offers "done".
   const handover = conversation?.handover ?? null;
