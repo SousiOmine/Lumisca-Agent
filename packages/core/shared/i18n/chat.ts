@@ -538,12 +538,51 @@ export const chat = {
     en: "Share a folder",
   },
   "chat.stella.share.title": {
-    ja: "フォルダーで共同作業",
-    en: "Share a folder",
+    ja: "このパソコンで共同作業",
+    en: "Work together on this computer",
   },
   "chat.stella.share.hint": {
     ja: "このPCのフォルダーを、この会話のエージェントが使えるようにします。",
     en: "Let this conversation's agent use a folder on this computer.",
+  },
+  /** The whole machine as one loan: every drive on Windows, the root on
+   * macOS and Linux. The shell enumerates the places; this is the heading of
+   * the list it filled. */
+  "chat.stella.share.computer.title": {
+    ja: "このパソコン全体",
+    en: "This whole computer",
+  },
+  "chat.stella.share.computer.hint": {
+    ja: "選んだ場所を、この会話のエージェントが使えるようにします。コマンドもこのユーザーとして実行できます。",
+    en: "Let this conversation's agent use the places below. It can also run commands as you.",
+  },
+  "chat.stella.share.computer.everything": {
+    ja: "すべてのファイル",
+    en: "All files",
+  },
+  "chat.stella.share.computer.none": {
+    ja: "接続できる場所が見つかりません。",
+    en: "No place to lend was found.",
+  },
+  "chat.stella.share.computer.lend": {
+    ja: "このパソコンを接続",
+    en: "Share this computer",
+  },
+  "chat.stella.share.computer.lending": {
+    ja: "接続しています…",
+    en: "Sharing…",
+  },
+  "chat.stella.share.computer.failed": {
+    ja: "接続できませんでした: {error}",
+    en: "Could not share: {error}",
+  },
+  "chat.stella.share.computer.disconnect": {
+    ja: "まとめて切断",
+    en: "Disconnect all",
+  },
+  "chat.stella.share.computer.disconnectFailed": {
+    ja: "切断できませんでした: {error}",
+    en: "Could not disconnect: {error}",
   },
   "chat.stella.share.pick": {
     ja: "フォルダーを選ぶ",

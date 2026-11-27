@@ -9,7 +9,7 @@ import {
   rememberFolder,
 } from "../../share-recents.ts";
 import { loadShareIdle, minutesOf, useShareIdle } from "../../shareIdle.ts";
-import { shellCall } from "../../shell.ts";
+import { inDesktopShell, shellCall } from "../../shell.ts";
 import { Modal } from "../Modal.tsx";
 import { ShareTerms } from "./ShareList.tsx";
 
@@ -21,6 +21,17 @@ export interface ShareGrantView {
   /** The folder on this computer, absolute. */
   path: string;
   write: boolean;
+  /** The loan it belongs to, when several places were lent at once. */
+  group?: string | null;
+}
+
+/** One place a whole-computer loan may cover: a drive on Windows, the root
+ * on macOS and Linux. The shell enumerates them because only it can see the
+ * disk this window runs on. */
+export interface ComputerRoot {
+  path: string;
+  label: string;
+  kind: string;
 }
 
 export interface ShareFolderDialogProps {
@@ -35,18 +46,17 @@ export interface ShareFolderDialogProps {
 }
 
 /**
- * Lend a folder from this computer to the open conversation.
+ * Lend this computer, or one folder on it, to the open conversation.
  *
- * The picker is the consent, so this dialog is what happens AROUND it: the
- * folder is chosen first, then the terms are read once (read-only or
- * read-write, and whether commands may run there), then "share" makes the
- * loan. Nothing is lent before that last press — a dialog that lent as soon
- * as a folder was picked would take the reader's click on a folder name for
+ * A conversation that needs several places at once (a Windows machine with
+ * more than one drive) is one loan: the places are checked together, lent
+ * under one group, and withdrawn together. One folder is still a loan of its
+ * own, chosen with the OS picker, which is the consent for that path.
+ *
+ * The picker is the consent for a folder; for the whole computer the shell
+ * asks before it lends. Nothing is lent before the last press: a dialog that
+ * lent as soon as a place was chosen would take a click on a drive for
  * agreement to everything else on the sheet.
- *
- * The recently shared folders are one step on purpose: they repeat a decision
- * the user already made, with the terms they set then. The shell still checks
- * that the folder exists before lending it.
  */
 export function ShareFolderDialog({
   sessionId,
@@ -62,12 +72,38 @@ export function ShareFolderDialog({
   const [write, setWrite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The whole computer: the places the shell can lend, which of them the
+  // user kept checked, and whether that loan is under way.
+  const [roots, setRoots] = useState<ComputerRoot[] | null>(null);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [computerWrite, setComputerWrite] = useState(false);
+  const [computerBusy, setComputerBusy] = useState(false);
+  const [computerError, setComputerError] = useState<string | null>(null);
   // The deadline the loan will actually get: the dialog states it before the
   // user agrees, and the settings page is where it is chosen.
   const idle = useShareIdle();
 
   useEffect(() => {
     loadShareIdle();
+  }, []);
+
+  useEffect(() => {
+    // A plain browser has no shell and therefore no disk to lend: the section
+    // stays away and the folder picker's own explanation shows instead.
+    if (!inDesktopShell()) return;
+    let live = true;
+    void shellCall<{ roots: ComputerRoot[] }>("share/computer-roots")
+      .then((answer) => {
+        if (!live) return;
+        setRoots(answer.roots);
+        setChosen(answer.roots.map((root) => root.path));
+      })
+      .catch(() => {
+        // No roots is the same as no section: nothing to lend here.
+      });
+    return () => {
+      live = false;
+    };
   }, []);
 
   const choose = async () => {
@@ -123,12 +159,142 @@ export function ShareFolderDialog({
     }
   };
 
+  /** Lend every checked place as one loan. The shell confirms the list
+   * before it lends, so a page bug cannot lend a disk on its own. */
+  const lendComputer = async (close: () => void) => {
+    if (computerBusy || chosen.length === 0) return;
+    setComputerBusy(true);
+    setComputerError(null);
+    try {
+      const answer = await shellCall<{
+        ok: boolean;
+        grants: ShareGrantView[];
+      }>("share/grant-computer", {
+        sessionId,
+        roots: chosen.join("\n"),
+        write: computerWrite ? "1" : "0",
+      });
+      const first = answer.grants[0];
+      if (first !== undefined) onLent?.(first);
+      close();
+    } catch (failure) {
+      setComputerError(
+        t("chat.stella.share.computer.failed", {
+          error: errorMessage(failure),
+        }),
+      );
+    } finally {
+      setComputerBusy(false);
+    }
+  };
+
+  const toggleRoot = (path: string) => {
+    setChosen((previous) =>
+      previous.includes(path)
+        ? previous.filter((entry) => entry !== path)
+        : [...previous, path],
+    );
+  };
+
   return (
     <Modal onClose={onClose} label={t("chat.stella.share.title")}>
       {(close) => (
         <>
           <h2>{t("chat.stella.share.title")}</h2>
           <p className="stella-share-hint">{t("chat.stella.share.hint")}</p>
+
+          {roots !== null && (
+            <section className="stella-share-computer">
+              <h3 className="stella-pane-section">
+                {t("chat.stella.share.computer.title")}
+              </h3>
+              <p className="stella-share-hint">
+                {t("chat.stella.share.computer.hint")}
+              </p>
+
+              {roots.length === 0 ? (
+                <p className="stella-share-note">
+                  {t("chat.stella.share.computer.none")}
+                </p>
+              ) : (
+                <>
+                  <ul className="stella-share-roots">
+                    {roots.map((root) => (
+                      <li key={root.path}>
+                        <label className="stella-share-root">
+                          <input
+                            type="checkbox"
+                            checked={chosen.includes(root.path)}
+                            disabled={computerBusy}
+                            onChange={() => toggleRoot(root.path)}
+                          />
+                          <span className="stella-share-root-name">
+                            {root.path === "/"
+                              ? t("chat.stella.share.computer.everything")
+                              : root.label}
+                          </span>
+                          <code
+                            className="stella-share-origin"
+                            title={root.path}
+                          >
+                            {root.path}
+                          </code>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                  <label className="stella-share-choice">
+                    <input
+                      type="radio"
+                      name="stella-share-computer-write"
+                      checked={!computerWrite}
+                      disabled={computerBusy}
+                      onChange={() => setComputerWrite(false)}
+                    />
+                    {t("chat.stella.share.readOnly")}
+                  </label>
+                  <label className="stella-share-choice">
+                    <input
+                      type="radio"
+                      name="stella-share-computer-write"
+                      checked={computerWrite}
+                      disabled={computerBusy}
+                      onChange={() => setComputerWrite(true)}
+                    />
+                    {t("chat.stella.share.readWrite")}
+                  </label>
+                  {idle !== null && (
+                    <p className="stella-share-note">
+                      {idle === "never"
+                        ? t("chat.stella.share.idleNever")
+                        : t("chat.stella.share.idle", {
+                            minutes: minutesOf(idle),
+                          })}
+                    </p>
+                  )}
+                  <div className="stella-share-actions">
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={computerBusy || chosen.length === 0}
+                      onClick={() => void lendComputer(() => close())}
+                    >
+                      {computerBusy
+                        ? t("chat.stella.share.computer.lending")
+                        : t("chat.stella.share.computer.lend")}
+                    </button>
+                  </div>
+                </>
+              )}
+              {computerError !== null && (
+                <p className="error-text" role="alert">
+                  {computerError}
+                </p>
+              )}
+            </section>
+          )}
+
+          {roots !== null && <hr className="stella-share-divider" />}
 
           <button
             type="button"

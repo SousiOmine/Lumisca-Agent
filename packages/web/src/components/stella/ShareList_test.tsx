@@ -41,3 +41,20 @@ test("ShareList: read-write says so", () => {
   const html = render([share({ write: true })]);
   assertStringIncludes(html, "読み書き");
 });
+
+test("ShareList: a whole-computer loan is one frame with one way out", () => {
+  const html = render([
+    share({ id: "g1", name: "c", path: "C:\\", group: "pc-1" }),
+    share({ id: "g2", name: "d", path: "D:\\", group: "pc-1" }),
+  ]);
+  // Two drives, one loan: the frame says which loan it is, and each place
+  // keeps the address the agent uses.
+  assertStringIncludes(html, "このパソコン全体");
+  assertStringIncludes(html, "/lend/c");
+  assertStringIncludes(html, "/lend/d");
+  assertStringIncludes(html, "C:\\");
+  assertStringIncludes(html, "D:\\");
+  // One withdrawal takes both, and no per-place button sits inside the loan.
+  assertEquals((html.match(/まとめて切断/g) ?? []).length, 1);
+  assertEquals(html.includes(">切断<"), false);
+});

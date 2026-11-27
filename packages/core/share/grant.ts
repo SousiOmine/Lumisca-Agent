@@ -149,6 +149,7 @@ export function parseGrant(value: unknown): FolderGrant | undefined {
     typeof v.name !== "string" ||
     !isShareName(v.name) ||
     typeof v.write !== "boolean" ||
+    !(v.group === undefined || typeof v.group === "string") ||
     !(
       v.expiresAt === null ||
       (typeof v.expiresAt === "number" && Number.isFinite(v.expiresAt))
@@ -169,6 +170,9 @@ export function parseGrant(value: unknown): FolderGrant | undefined {
     write: v.write,
     expiresAt: v.expiresAt,
     host: { platform: h.platform, name: h.name, shell: h.shell },
+    ...(typeof v.group === "string" && v.group !== ""
+      ? { group: v.group }
+      : {}),
   };
 }
 

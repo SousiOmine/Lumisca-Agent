@@ -42,7 +42,7 @@ function render(): string {
 
 test("ShareFolderDialog: nothing is lent until a folder is chosen", () => {
   const html = withStorage(memoryStorage(null), render);
-  assertStringIncludes(html, "フォルダーで共同作業");
+  assertStringIncludes(html, "このパソコンで共同作業");
   assertStringIncludes(html, "フォルダーを選ぶ");
   // A phone shows the dialog full screen, so the backdrop is not a way out:
   // the close button has to be in the sheet whatever state it is in.

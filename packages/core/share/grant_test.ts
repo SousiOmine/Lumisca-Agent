@@ -12,6 +12,7 @@ import {
   sharePathOf,
   shareRootOf,
 } from "./grant.ts";
+import { sharesOf } from "./registry.ts";
 import { grantOf } from "./test-utils.ts";
 
 test("a lent folder's name is a path segment", () => {
@@ -94,4 +95,29 @@ test("an announcement may carry no deadline", () => {
   // not the same app as one that says it never ends.
   const { expiresAt: _omitted, ...withoutDeadline } = wire;
   assertEquals(parseGrant(withoutDeadline), undefined);
+});
+
+test("a grant carries the loan it belongs to", () => {
+  const wire = {
+    id: "g1",
+    sessionId: "s1",
+    name: "c",
+    path: "C:\\",
+    write: false,
+    expiresAt: null,
+    host: { platform: "windows", name: "pc", shell: "pwsh" },
+  };
+  // A folder lent on its own has no group; the places of one computer loan
+  // share one, and it travels to the client unchanged.
+  assertEquals(parseGrant(wire)?.group, undefined);
+  const grouped = parseGrant({ ...wire, group: "pc-1" });
+  assertEquals(grouped?.group, "pc-1");
+  // The client draws the list from the same object: the group must survive
+  // the copy the server sends, or the loan would draw as two folders.
+  assertEquals(
+    grouped === undefined ? undefined : sharesOf([grouped])[0]?.group,
+    "pc-1",
+  );
+  // A group that is not a string is a different shape, not a name.
+  assertEquals(parseGrant({ ...wire, group: 4 }), undefined);
 });

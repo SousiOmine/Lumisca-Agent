@@ -7,6 +7,7 @@
 
 use tauri::http::StatusCode;
 use tauri::AppHandle;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 use super::wire::{bridge_error, bridge_json, BridgeReply, Params};
 use crate::share;
@@ -30,6 +31,76 @@ pub(super) fn grant(app: &AppHandle, params: &Params) -> BridgeReply {
             serde_json::json!({ "ok": true, "grant": grant }),
         ),
         Err(e) => bridge_error(StatusCode::BAD_REQUEST, &e),
+    }
+}
+
+/// The places a whole-computer loan may cover on this machine. The page
+/// cannot enumerate them itself: it is served by the (possibly remote)
+/// server, and the disk is here.
+pub(super) fn computer_roots() -> BridgeReply {
+    bridge_json(
+        StatusCode::OK,
+        serde_json::json!({ "roots": share::detect_computer_roots() }),
+    )
+}
+
+/// Lend this computer as one loan: every place the user checked, under one
+/// group id.
+///
+/// The page draws the list, but the consent is confirmed here, because the
+/// disk is the shell's. The confirmation names every place it covers and
+/// says what a loan allows before anything is lent.
+pub(super) fn grant_computer(app: &AppHandle, params: &Params) -> BridgeReply {
+    let Some(roots) = params.get("roots") else {
+        return bridge_error(StatusCode::BAD_REQUEST, "roots required");
+    };
+    let paths: Vec<String> = roots
+        .split('\n')
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(str::to_string)
+        .collect();
+    if paths.is_empty() {
+        return bridge_error(StatusCode::BAD_REQUEST, "貸す場所が選ばれていません");
+    }
+    let session_id = params.get("sessionId").unwrap_or_default();
+    let write = params.get("write").as_deref() == Some("1");
+
+    let places = paths
+        .iter()
+        .map(|path| format!("・{path}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let text = format!(
+        "このパソコンをエージェントに貸します。\n\n{places}\n\n貸している間、エージェントはこのユーザーとしてファイルを読み書きし、コマンドを実行できます。"
+    );
+    let confirmed = app
+        .dialog()
+        .message(text)
+        .title("このパソコンを貸す")
+        .buttons(MessageDialogButtons::OkCancel)
+        .blocking_show();
+    if !confirmed {
+        return bridge_error(StatusCode::BAD_REQUEST, "貸出をキャンセルしました");
+    }
+
+    match share::grant_computer(app, &session_id, &paths, write) {
+        Ok(grants) => bridge_json(
+            StatusCode::OK,
+            serde_json::json!({ "ok": true, "grants": grants }),
+        ),
+        Err(e) => bridge_error(StatusCode::BAD_REQUEST, &e),
+    }
+}
+
+/// Withdraw one whole-computer loan by its group id.
+pub(super) fn revoke_group(app: &AppHandle, params: &Params) -> BridgeReply {
+    let Some(group) = params.get("group") else {
+        return bridge_error(StatusCode::BAD_REQUEST, "group required");
+    };
+    match share::revoke_group(app, &group) {
+        Ok(()) => bridge_json(StatusCode::OK, serde_json::json!({ "ok": true })),
+        Err(e) => bridge_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
     }
 }
 

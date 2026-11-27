@@ -35,6 +35,24 @@ pub(crate) struct ShareGrantView {
     /// The folder on this computer, absolute.
     pub(crate) path: String,
     pub(crate) write: bool,
+    /// The loan this grant belongs to, when the user lent several places at
+    /// once ("this computer"). The page draws one row per loan and withdraws
+    /// them together; a folder lent on its own has none.
+    pub(crate) group: Option<String>,
+}
+
+/// One place a whole-computer loan may cover: a drive on Windows, the root
+/// on macOS and Linux. The shell enumerates these; the page chooses among
+/// them, and the grant path of a computer loan accepts nothing else.
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ComputerRoot {
+    /// The path to lend, absolute.
+    pub(crate) path: String,
+    /// What the row is called: the drive letter, or the root's own path.
+    pub(crate) label: String,
+    /// "drive" or "root": the page says which kind of place it is.
+    pub(crate) kind: String,
 }
 
 /// The line the child receives for one grant. The field names are the
@@ -46,6 +64,7 @@ struct GrantLine<'a> {
     session_id: &'a str,
     path: &'a str,
     write: bool,
+    group: Option<&'a str>,
 }
 
 struct Endpoint {
@@ -89,6 +108,7 @@ impl ShareLender {
                 session_id: &grant.session_id,
                 path: &grant.path,
                 write: grant.write,
+                group: grant.group.as_deref(),
             })
             .collect();
         self.write_line(serde_json::json!({
@@ -261,9 +281,98 @@ pub(crate) fn grant(
     path: &str,
     write: bool,
 ) -> Result<ShareGrantView, String> {
-    if session_id.is_empty() {
-        return Err("借りる会話が指定されていません".to_string());
+    let folder = lendable_folder(path)?;
+    let state = app.state::<AppState>();
+    let approved = settings::load(app).approved_share_folders;
+    {
+        let lender = state.share.lock_recover();
+        if !may_lend(&approved, &lender.grants, &folder) {
+            return Err(
+                "このフォルダーは選択されていません。フォルダーを選択してから共有してください。"
+                    .to_string(),
+            );
+        }
     }
+    grant_at(app, session_id, &folder, write, None)
+}
+
+/// Lend every place the user chose as one loan ("this computer").
+///
+/// The shell enumerated these roots and the user confirmed the list, so the
+/// folder picker's approval check does not apply; the paths are checked
+/// against the shell's own enumeration instead. One group id ties the grants
+/// together, which is how the page and the user withdraw the loan at once.
+pub(crate) fn grant_computer(
+    app: &AppHandle,
+    session_id: &str,
+    roots: &[String],
+    write: bool,
+) -> Result<Vec<ShareGrantView>, String> {
+    if roots.is_empty() {
+        return Err("貸す場所が選ばれていません".to_string());
+    }
+    let allowed = detect_computer_roots();
+    let mut folders: Vec<String> = Vec::new();
+    for root in roots {
+        let folder = lendable_folder(root)?;
+        let known = allowed
+            .iter()
+            .any(|candidate| simplify(PathBuf::from(&candidate.path)) == folder);
+        if !known {
+            return Err(format!("このパソコンのルートではありません: {folder}"));
+        }
+        if !folders.iter().any(|known| known == &folder) {
+            folders.push(folder);
+        }
+    }
+    let group = format!("pc-{}", server::generate_token());
+    let mut grants = Vec::with_capacity(folders.len());
+    for folder in folders {
+        grants.push(grant_at(app, session_id, &folder, write, Some(&group))?);
+    }
+    server_log::note(
+        app,
+        format!("このパソコンを貸しました: {}か所", grants.len()),
+    );
+    Ok(grants)
+}
+
+/// The places a whole-computer loan may cover on this machine.
+///
+/// Windows has one root per drive and no single one above them, so a loan of
+/// "this computer" is a list: every drive the shell can see. A drive that is
+/// not ready is not enumerated.
+#[cfg(windows)]
+pub(crate) fn detect_computer_roots() -> Vec<ComputerRoot> {
+    let mut roots = Vec::new();
+    for letter in b'A'..=b'Z' {
+        let path = format!("{}:\\", letter as char);
+        if PathBuf::from(&path).exists() {
+            roots.push(ComputerRoot {
+                path,
+                label: format!("{}:", letter as char),
+                kind: "drive".to_string(),
+            });
+        }
+    }
+    roots
+}
+
+/// The places a whole-computer loan may cover on this machine.
+///
+/// macOS and Linux have one root, and every volume is below it.
+#[cfg(not(windows))]
+pub(crate) fn detect_computer_roots() -> Vec<ComputerRoot> {
+    vec![ComputerRoot {
+        path: "/".to_string(),
+        label: "/".to_string(),
+        kind: "root".to_string(),
+    }]
+}
+
+/// The folder a path names, canonical and absolute, or why it cannot be
+/// lent. The disk boundary is checked before the path is measured.
+fn lendable_folder(path: &str) -> Result<String, String> {
     let requested = PathBuf::from(path);
     if !requested.is_absolute() {
         return Err("フォルダは絶対パスで指定してください".to_string());
@@ -273,19 +382,25 @@ pub(crate) fn grant(
     if !canonical.is_dir() {
         return Err(format!("フォルダではありません: {}", requested.display()));
     }
-    let folder = simplify(canonical);
+    Ok(simplify(canonical))
+}
+
+/// One grant, made with the terms and group the caller decided.
+fn grant_at(
+    app: &AppHandle,
+    session_id: &str,
+    folder: &str,
+    write: bool,
+    group: Option<&str>,
+) -> Result<ShareGrantView, String> {
+    if session_id.is_empty() {
+        return Err("借りる会話が指定されていません".to_string());
+    }
     let (url, token) =
         displayed_endpoint(app).ok_or_else(|| "表示中のサーバーがありません".to_string())?;
 
     let state = app.state::<AppState>();
     let mut lender = state.share.lock_recover();
-    let approved = settings::load(app).approved_share_folders;
-    if !may_lend(&approved, &lender.grants, &folder) {
-        return Err(
-            "このフォルダーは選択されていません。フォルダーを選択してから共有してください。"
-                .to_string(),
-        );
-    }
     let mut added = false;
     let view = if let Some(existing) = lender
         .grants
@@ -296,13 +411,15 @@ pub(crate) fn grant(
         // A second grant would give the conversation `/lend/proj-2` for the
         // same folder, which is a name the user never asked for.
         existing.write = write;
+        existing.group = group.map(str::to_string);
         existing.clone()
     } else {
         let view = ShareGrantView {
             id: server::generate_token(),
             session_id: session_id.to_string(),
-            path: folder,
+            path: folder.to_string(),
             write,
+            group: group.map(str::to_string),
         };
         lender.grants.push(view.clone());
         added = true;
@@ -326,6 +443,26 @@ pub(crate) fn grant(
         ),
     );
     Ok(view)
+}
+
+/// Withdraw every grant of one loan ("this computer").
+pub(crate) fn revoke_group(app: &AppHandle, group: &str) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let mut lender = state.share.lock_recover();
+    if !without_group(&mut lender.grants, group) {
+        return Ok(());
+    }
+    if lender.child.is_some() {
+        lender.send_grants(app)?;
+    }
+    Ok(())
+}
+
+/// Drop every grant of `group`, and say whether any was dropped.
+fn without_group(grants: &mut Vec<ShareGrantView>, group: &str) -> bool {
+    let before = grants.len();
+    grants.retain(|grant| grant.group.as_deref() != Some(group));
+    grants.len() != before
 }
 
 /// Withdraw one grant. The child announces the shorter list, and the server
@@ -454,6 +591,14 @@ mod tests {
             session_id: "s".to_string(),
             path: path.to_string(),
             write: false,
+            group: None,
+        }
+    }
+
+    fn grouped(path: &str, group: &str) -> ShareGrantView {
+        ShareGrantView {
+            group: Some(group.to_string()),
+            ..grant(path)
         }
     }
 
@@ -470,5 +615,32 @@ mod tests {
         // child hears of it.
         assert!(!may_lend(&approved, &lent, "/home/user"));
         assert!(!may_lend(&[], &[], "/home/user/.ssh"));
+    }
+
+    #[test]
+    fn a_computer_loan_is_withdrawn_as_one_group() {
+        let mut lent = vec![
+            grouped("/", "pc-1"),
+            grouped("/home/user/proj", "pc-1"),
+            grant("/home/user/notes"),
+        ];
+
+        // One withdrawal takes every place of the loan, and nothing else.
+        assert!(without_group(&mut lent, "pc-1"));
+        assert_eq!(lent.len(), 1);
+        assert_eq!(lent[0].path, "/home/user/notes");
+
+        // A group nobody lent is not an error: the page may disconnect a
+        // list that already ended by itself.
+        assert!(!without_group(&mut lent, "pc-1"));
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn the_root_is_what_a_unix_computer_loan_covers() {
+        let roots = detect_computer_roots();
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].path, "/");
+        assert_eq!(roots[0].kind, "root");
     }
 }

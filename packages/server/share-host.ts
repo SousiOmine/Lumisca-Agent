@@ -64,6 +64,9 @@ export interface LocalGrant {
   /** The folder on this machine, absolute. */
   path: string;
   write: boolean;
+  /** The loan it belongs to ("this computer"): several grants announced
+   * under one group are drawn and withdrawn together. */
+  group?: string;
 }
 
 /** What the shell writes on this process's stdin, one JSON object per line. */
@@ -577,6 +580,7 @@ function describeGrant(
     host,
     write: grant.write,
     expiresAt,
+    ...(grant.group === undefined ? {} : { group: grant.group }),
   };
 }
 
@@ -639,6 +643,9 @@ function parseLocalGrant(value: unknown): LocalGrant | undefined {
     sessionId: record.sessionId,
     path: record.path,
     write: record.write,
+    ...(typeof record.group === "string" && record.group !== ""
+      ? { group: record.group }
+      : {}),
   };
 }
 

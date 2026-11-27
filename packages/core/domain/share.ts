@@ -46,4 +46,9 @@ export interface FolderShare {
    * when the user turned the idle clock off, and the loan then lasts until
    * it is disconnected or the lending app closes. */
   expiresAt: number | null;
+  /** The loan this grant belongs to, when the user lent several places at
+   * once ("this computer"). The page draws one row per loan and withdraws
+   * them together; a folder lent on its own has none. Display only: the
+   * server keys grants by their own ids and never groups them for access. */
+  group?: string;
 }
