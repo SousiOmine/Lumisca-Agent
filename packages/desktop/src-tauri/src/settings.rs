@@ -53,6 +53,19 @@ pub(crate) struct DesktopSettings {
     /// hand `/home/<user>` to a conversation the user never chose.
     #[serde(default)]
     pub(crate) approved_share_folders: Vec<String>,
+    /// How long a lent folder survives without an access, in minutes. `None`
+    /// is the settings page's なし: the loan then lasts until the user
+    /// disconnects it or the app quits.
+    ///
+    /// The default is the 30 minutes the shell lived with before the choice
+    /// existed. A file written by that version has no key, so the serde
+    /// default must be the old behaviour rather than `None`.
+    #[serde(default = "default_share_idle_minutes")]
+    pub(crate) share_idle_minutes: Option<u32>,
+}
+
+fn default_share_idle_minutes() -> Option<u32> {
+    Some(30)
 }
 
 impl Default for DesktopSettings {
@@ -62,6 +75,7 @@ impl Default for DesktopSettings {
             connections: Vec::new(),
             current: None,
             approved_share_folders: Vec::new(),
+            share_idle_minutes: default_share_idle_minutes(),
         }
     }
 }
@@ -198,6 +212,7 @@ mod tests {
             }],
             current: Some("home".into()),
             approved_share_folders: vec!["/home/user/proj".into()],
+            share_idle_minutes: None,
         };
         save_to(&file.0, &settings).unwrap();
         assert_eq!(load_from(&file.0), settings);
@@ -220,6 +235,27 @@ mod tests {
         save_to(&file.0, &DesktopSettings::default()).unwrap();
         let mode = std::fs::metadata(&file.0).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
+    }
+
+    /// A file written before the choice existed has no idle key: it must
+    /// keep the 30 minutes those versions used, not read as "never".
+    #[test]
+    fn a_file_without_the_idle_key_keeps_the_thirty_minute_clock() {
+        let file = TempFile::new("idle-default");
+        std::fs::write(&file.0, r#"{"autoUpdate":true}"#).unwrap();
+        assert_eq!(load_from(&file.0).share_idle_minutes, Some(30));
+    }
+
+    /// なし is stored as `null`; it must survive a read of the file.
+    #[test]
+    fn an_explicit_null_turns_the_idle_clock_off() {
+        let file = TempFile::new("idle-never");
+        std::fs::write(
+            &file.0,
+            r#"{"autoUpdate":true,"shareIdleMinutes":null}"#,
+        )
+        .unwrap();
+        assert_eq!(load_from(&file.0).share_idle_minutes, None);
     }
 
     /// The default `derive` spelling is what the shell itself writes, so

@@ -277,6 +277,52 @@ test("a loan ends after 30 idle minutes, and an access restarts the clock", asyn
   }
 });
 
+test("the shell can turn the idle clock off while a loan is lent", async () => {
+  const { core, server, base } = setup();
+  const root = folder();
+  const expired: string[][] = [];
+  const lender = createShareHost({
+    retryMs: 10,
+    idleMs: 600,
+    onExpired: (ids) => expired.push([...ids]),
+  });
+  const sleep = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+  try {
+    lender.command(JSON.stringify({ type: "hello", url: base, token: "" }));
+    lender.command(JSON.stringify({ type: "grants", grants: [grant(root)] }));
+    await until(
+      () => core.shares.grantsFor(SESSION).length === 1,
+      "the loan to reach the server",
+    );
+
+    // Settings → アプリ chose なし while this folder was lent. The next
+    // announcement carries it, and the loan outlives the old deadline.
+    lender.command(
+      JSON.stringify({
+        type: "grants",
+        grants: [grant(root)],
+        idleMs: null,
+      }),
+    );
+    await until(
+      () => core.shares.sharesFor(SESSION)[0]?.expiresAt === null,
+      "the deadline to leave the grant",
+    );
+    await sleep(900);
+    assertEquals(core.shares.grantsFor(SESSION).length, 1);
+    assertEquals(expired, []);
+    // The folder still answers: "no deadline" is not "read only".
+    const stat = await core.shares.call("g1", "stat", { path: [] });
+    assertEquals(stat?.isFile, false);
+  } finally {
+    lender.close();
+    server.shutdown();
+    await core.close();
+    await removeDirRetry(root);
+  }
+});
+
 test("a line the process cannot read is ignored", () => {
   const lender = createShareHost({ retryMs: 10 });
   try {

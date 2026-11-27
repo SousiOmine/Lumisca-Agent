@@ -42,6 +42,8 @@ export interface FolderShare {
    * shell that could only read would not be able to run the `git status` or
    * `grep` the user lent it for. */
   write: boolean;
-  /** Epoch ms after which the lender drops the grant on its own. */
-  expiresAt: number;
+  /** Epoch ms after which the lender drops the grant on its own; `null`
+   * when the user turned the idle clock off, and the loan then lasts until
+   * it is disconnected or the lending app closes. */
+  expiresAt: number | null;
 }

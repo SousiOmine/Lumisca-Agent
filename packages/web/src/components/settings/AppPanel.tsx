@@ -6,6 +6,7 @@ import { useT } from "../../i18n.ts";
 import { inDesktopShell, type UpdateStatus } from "../../shell.ts";
 import type { ThemeSetting } from "../../types.ts";
 import { AppearancePanel } from "./AppearancePanel.tsx";
+import { SharingPanel } from "./SharingPanel.tsx";
 import { UpdateSection } from "./UpdateSection.tsx";
 
 interface AppPanelProps {
@@ -26,7 +27,8 @@ interface AppPanelProps {
 
 /**
  * Settings → アプリ: the program the reader is looking through — its theme,
- * and the desktop shell's updater when the shell is what serves the page.
+ * the folders it lends to conversations, and the desktop shell's updater when
+ * the shell is what serves the page.
  *
  * The theme is the window's own value, so it sits on this page for the same
  * reason the updater does: both answer for the client in front of the reader.
@@ -79,6 +81,7 @@ export function AppPanel({
   return (
     <>
       <AppearancePanel theme={theme} onThemeChange={onThemeChange} />
+      <SharingPanel />
       {update !== null && <div className="settings-pane">{update}</div>}
     </>
   );

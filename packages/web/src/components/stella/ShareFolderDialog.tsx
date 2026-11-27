@@ -1,6 +1,6 @@
 import { errorMessage } from "@lumisca/core/shared";
 import { IconFolder } from "@tabler/icons-preact";
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import {
   folderName,
@@ -8,6 +8,7 @@ import {
   type RecentShareFolder,
   rememberFolder,
 } from "../../share-recents.ts";
+import { loadShareIdle, minutesOf, useShareIdle } from "../../shareIdle.ts";
 import { shellCall } from "../../shell.ts";
 import { Modal } from "../Modal.tsx";
 import { ShareTerms } from "./ShareList.tsx";
@@ -61,6 +62,13 @@ export function ShareFolderDialog({
   const [write, setWrite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The deadline the loan will actually get: the dialog states it before the
+  // user agrees, and the settings page is where it is chosen.
+  const idle = useShareIdle();
+
+  useEffect(() => {
+    loadShareIdle();
+  }, []);
 
   const choose = async () => {
     if (busy) return;
@@ -156,7 +164,15 @@ export function ShareFolderDialog({
                 />
                 {t("chat.stella.share.readWrite")}
               </label>
-              <p className="stella-share-note">{t("chat.stella.share.idle")}</p>
+              {idle !== null && (
+                <p className="stella-share-note">
+                  {idle === "never"
+                    ? t("chat.stella.share.idleNever")
+                    : t("chat.stella.share.idle", {
+                        minutes: minutesOf(idle),
+                      })}
+                </p>
+              )}
               <div className="stella-share-actions">
                 <button
                   type="button"

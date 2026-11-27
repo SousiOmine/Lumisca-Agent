@@ -75,7 +75,12 @@ impl ShareLender {
             .map_err(|error| format!("フォルダ共有のプロセスに書き込めません: {error}"))
     }
 
-    fn send_grants(&mut self) -> Result<(), String> {
+    /// Announce the complete list, and with it the idle deadline the lending
+    /// process must apply. Both travel together because a list without the
+    /// deadline would leave the process on whatever it was told last; the
+    /// setting is read here rather than kept beside the grants so the file
+    /// stays the one place it lives.
+    fn send_grants(&mut self, app: &AppHandle) -> Result<(), String> {
         let grants: Vec<GrantLine> = self
             .grants
             .iter()
@@ -86,7 +91,11 @@ impl ShareLender {
                 write: grant.write,
             })
             .collect();
-        self.write_line(serde_json::json!({ "type": "grants", "grants": grants }))
+        self.write_line(serde_json::json!({
+            "type": "grants",
+            "grants": grants,
+            "idleMs": idle_ms(app),
+        }))
     }
 
     /// Start the child if it is not running, and say hello when this is a new
@@ -109,7 +118,7 @@ impl ShareLender {
                 token: token.to_string(),
             });
         }
-        self.send_grants()
+        self.send_grants(app)
     }
 
     fn ensure_child(&mut self, app: &AppHandle) -> Result<(), String> {
@@ -190,6 +199,50 @@ fn remember_approved(app: &AppHandle, folder: &str) -> Result<(), String> {
             settings.approved_share_folders.push(folder.to_string());
         }
     })
+}
+
+/// The idle deadline in the settings: minutes, or `None` for "do not end a
+/// loan on its own".
+pub(crate) fn idle_minutes(app: &AppHandle) -> Option<u32> {
+    settings::load(app).share_idle_minutes
+}
+
+/// The deadlines Settings → アプリ offers. Anything else is refused before it
+/// is written: the page's list and this one are the same choices, and a value
+/// neither side names would leave the process on a clock no page shows.
+const IDLE_MINUTES: [u32; 4] = [5, 10, 15, 30];
+
+/// The deadline the lending process is told, in milliseconds.
+fn idle_ms(app: &AppHandle) -> Option<u64> {
+    idle_minutes(app).map(|minutes| u64::from(minutes) * 60_000)
+}
+
+/// Change the idle deadline. A running lending process hears about it at
+/// once: its clock is what ends a loan, and waiting for the next grant would
+/// leave the old deadline in force until the user lent something else.
+pub(crate) fn set_idle_minutes(app: &AppHandle, minutes: Option<u32>) -> Result<(), String> {
+    if let Some(minutes) = minutes {
+        if !IDLE_MINUTES.contains(&minutes) {
+            return Err(format!("自動切断の時間として使えない値です: {minutes}分"));
+        }
+    }
+    settings::update(app, |settings| {
+        settings.share_idle_minutes = minutes;
+    })?;
+    let state = app.state::<AppState>();
+    let mut lender = state.share.lock_recover();
+    if lender.child.is_some() {
+        lender.send_grants(app)?;
+    }
+    drop(lender);
+    server_log::note(
+        app,
+        match minutes {
+            Some(minutes) => format!("フォルダー共有の自動切断を{minutes}分に変更しました。"),
+            None => "フォルダー共有の自動切断を無効にしました。".to_string(),
+        },
+    );
+    Ok(())
 }
 
 /// Whether `folder` may be lent: the picker returned it at some point, or it
@@ -286,7 +339,7 @@ pub(crate) fn revoke(app: &AppHandle, id: &str) -> Result<(), String> {
         return Ok(());
     }
     if lender.child.is_some() {
-        lender.send_grants()?;
+        lender.send_grants(app)?;
     }
     Ok(())
 }
@@ -301,7 +354,7 @@ pub(crate) fn revoke_all(app: &AppHandle) {
     lender.grants.clear();
     lender.endpoint = None;
     if had > 0 && lender.child.is_some() {
-        let _ = lender.send_grants();
+        let _ = lender.send_grants(app);
         server_log::note(
             app,
             "表示するサーバーが変わったため、貸出をすべて取り消しました。",
@@ -340,7 +393,7 @@ fn pump_stdout(app: AppHandle, pipe: ChildStdout) {
                 server_log::note(
                     &app,
                     format!(
-                        "30分アクセスが無かったため貸出を終了しました: {}",
+                        "アクセスが無いまま自動切断の時間を過ぎたため、共有を終了しました: {}",
                         ids.join(", ")
                     ),
                 );

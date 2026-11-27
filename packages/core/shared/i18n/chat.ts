@@ -561,12 +561,17 @@ export const chat = {
     ja: "読み書き",
     en: "Read and write",
   },
-  /** The connection's clock is the host's: keep the sentence in step with
-   * SHARE_IDLE_MS in packages/server/share-host.ts. The sentence says what
-   * ends (the connection), not that something "cuts off". */
+  /** The connection's clock is the host's, and the reader chose it in
+   * Settings → アプリ: `minutes` is that choice, so the sentence must not
+   * repeat a length. The sentence says what ends (the connection), not that
+   * something "cuts off". */
   "chat.stella.share.idle": {
-    ja: "最後に使ってから30分で切断されます。",
-    en: "Ends 30 minutes after the last use.",
+    ja: "最後に使ってから{minutes}分で切断されます。",
+    en: "Ends {minutes} minutes after the last use.",
+  },
+  "chat.stella.share.idleNever": {
+    ja: "自動では切断されません。使い終わったら切断してください。",
+    en: "It does not end on its own. Disconnect it when you are done.",
   },
   "chat.stella.share.lend": { ja: "接続", en: "Share" },
   "chat.stella.share.lending": {

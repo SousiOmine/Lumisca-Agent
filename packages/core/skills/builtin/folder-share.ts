@@ -48,8 +48,9 @@ in ~/src/site".
 5. If nobody answers within 15 minutes the card closes and the tool says no
    folder was lent. Calling it again starts a new wait.
 
-The loan is the user's decision and it is temporary: it ends 30 minutes after
-the last use, and they can withdraw it at any moment from the conversation's
+The loan is the user's decision and it is temporary: the app ends it after a
+period without use, and the user chooses that period in the app's settings or
+turns it off. They can withdraw the loan at any moment from the conversation's
 information panel. A message in your context lists what is lent right now;
 read that rather than assuming a folder is still there.
 

@@ -172,7 +172,9 @@ test("builtinSkills advertises folder-share only in a stella session", async () 
   assert(guide.includes("share_disconnect"));
   // An absolute path is the one thing a model gets wrong about a loan.
   assert(guide.includes("/lend/"));
-  assert(guide.includes("30 minutes"));
+  // The idle deadline is a setting now: the guide must not promise a length
+  // the user may have changed.
+  assert(guide.includes("period without use"));
   // Only a stella session has the /lend namespace.
   assertEquals(
     builtinSkills({ browser: false, computer: false, subagents: false }).some(

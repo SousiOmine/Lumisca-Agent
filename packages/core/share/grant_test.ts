@@ -5,6 +5,7 @@ import {
   isShareName,
   isSharePath,
   isWithinShare,
+  parseGrant,
   relativeSegments,
   SHARE_ROOT,
   shareNameFrom,
@@ -76,4 +77,21 @@ test("the longest matching grant owns a path", () => {
   assertEquals(grantOwning(grants, shareRootOf("other")), undefined);
   // Not a path-prefix match: "proj-2" is a different folder, not a child.
   assertEquals(grantOwning(grants, `${SHARE_ROOT}/proj2/x`), undefined);
+});
+
+test("an announcement may carry no deadline", () => {
+  const wire = {
+    id: "g1",
+    sessionId: "s1",
+    name: "proj",
+    path: "/Users/me/proj",
+    write: true,
+    expiresAt: null,
+    host: { platform: "macos", name: "mac", shell: "zsh" },
+  };
+  assertEquals(parseGrant(wire)?.expiresAt, null);
+  // The field is still required: an app that never says when its loan ends is
+  // not the same app as one that says it never ends.
+  const { expiresAt: _omitted, ...withoutDeadline } = wire;
+  assertEquals(parseGrant(withoutDeadline), undefined);
 });

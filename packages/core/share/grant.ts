@@ -29,9 +29,11 @@ export interface FolderGrant extends FolderShare {
  * what a session may reach, the client's copy of that list, and the file
  * backend's own refusal all ask this, so a loan cannot be live in one place
  * and gone in another. A grant whose deadline is exactly now is over: the
- * lending app promises the folder until that instant, not through it. */
+ * lending app promises the folder until that instant, not through it. A grant
+ * without a deadline (`null`: the user turned the idle clock off) ends only
+ * when the app announces a shorter list or disconnects. */
 export function isExpired(grant: FolderGrant, now: number): boolean {
-  return grant.expiresAt <= now;
+  return grant.expiresAt !== null && grant.expiresAt <= now;
 }
 
 /** The namespace path a name resolves to. */
@@ -147,8 +149,10 @@ export function parseGrant(value: unknown): FolderGrant | undefined {
     typeof v.name !== "string" ||
     !isShareName(v.name) ||
     typeof v.write !== "boolean" ||
-    typeof v.expiresAt !== "number" ||
-    !Number.isFinite(v.expiresAt) ||
+    !(
+      v.expiresAt === null ||
+      (typeof v.expiresAt === "number" && Number.isFinite(v.expiresAt))
+    ) ||
     (h.platform !== "macos" &&
       h.platform !== "windows" &&
       h.platform !== "linux") ||

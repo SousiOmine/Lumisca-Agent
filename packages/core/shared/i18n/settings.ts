@@ -60,6 +60,28 @@ export const settings = {
     en: "Enter",
   },
 
+  // --- folder sharing (Settings → アプリ) ------------------------------------
+  "settings.share.title": { ja: "フォルダー共有", en: "Folder sharing" },
+  "settings.share.description": {
+    ja: "この端末から会話へ接続するフォルダーの扱いを決めます。",
+    en: "How folders connected from this computer to a conversation are handled.",
+  },
+  "settings.share.idle.label": { ja: "自動切断", en: "Auto-disconnect" },
+  "settings.share.idle.description": {
+    ja: "最後に使ってからこの時間が経つと、フォルダー共有を切断します。",
+    en: "Disconnects a shared folder this long after its last use.",
+  },
+  "settings.share.idle.minutes": { ja: "{minutes}分", en: "{minutes} min" },
+  "settings.share.idle.never": { ja: "なし", en: "Never" },
+  "settings.share.idle.neverNote": {
+    ja: "使い終わるまで接続したままになります。手動で切断するか、アプリを終了すると切断されます。",
+    en: "The folder stays connected until you disconnect it or quit the app.",
+  },
+  "settings.share.idle.saveFailed": {
+    ja: "自動切断の設定を保存できませんでした: {error}",
+    en: "Could not save the auto-disconnect setting: {error}",
+  },
+
   // `settings.language.*` keys below are read by the general panel (the
   // language is a general preference, not a settings category of its own).
   "settings.language.label": { ja: "言語", en: "Language" },

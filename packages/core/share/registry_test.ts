@@ -27,6 +27,14 @@ test("a grant is expired at its deadline, not after it", () => {
   assertEquals(isExpired(grant, 1_001), true);
 });
 
+test("a grant without a deadline never expires", () => {
+  // なし: the lender keeps the loan until it is disconnected, so the server
+  // must not read "no deadline" as "expired long ago".
+  const grant = grantOf({ expiresAt: null });
+  assertEquals(isExpired(grant, Date.now()), false);
+  assertEquals(isExpired(grant, Number.MAX_SAFE_INTEGER), false);
+});
+
 test("grantsFor drops the expired one and sorts the rest by name", () => {
   const registry = new ShareRegistry();
   registry.register(sinkOf(), {

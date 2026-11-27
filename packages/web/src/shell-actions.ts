@@ -23,6 +23,9 @@ export const SHELL_ACTIONS = [
   "share/pick-folder",
   "share/grant",
   "share/revoke",
+  // How long a loan survives without use (Settings → アプリ).
+  "share/idle",
+  "share/set-idle",
   // Local server diagnostics.
   "server/status",
   "server/restart",

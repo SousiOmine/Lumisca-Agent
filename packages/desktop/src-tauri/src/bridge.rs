@@ -111,6 +111,8 @@ pub(crate) fn handle_shell_action(
         "share/pick-folder" => sharing::pick_folder(app),
         "share/grant" => sharing::grant(app, &params),
         "share/revoke" => sharing::revoke(app, &params),
+        "share/idle" => sharing::idle(app),
+        "share/set-idle" => sharing::set_idle(app, &params),
         "server/status" => diagnostics::status(app),
         "server/restart" => diagnostics::restart(app),
         "open-url" => links::open_url(&params),

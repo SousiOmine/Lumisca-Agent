@@ -245,7 +245,8 @@ Linux 上の rootless podman を前提とし、起動確認（`VM_PROBE_IMAGE`�
   `packages/core/vm/shell.ts` の前景と背景の両コマンド先頭で `env.sh` を source し、書き込み成功後にのみ待機を解除します。
 - **ローカルフォルダー共有（`/lend`）**：`packages/core/share/`、`packages/server/share-host.ts`、`packages/desktop/src-tauri/src/share.rs` で構成します。
   名前空間の合成は `mountedBackends`（`packages/core/agent/session-location.ts`）の 1 箇所で行い、`MountedFiles` の `roots[0]` は必ずセッション自身のルートにします。
-  `/lend` 直下への読み書き拒否、相対パスセグメントでの通信、backend 層での読み取り専用強制、context メッセージのみでの告知、貸し手プロセス側での最終アクセス 30 分期限管理を守ってください。
+  `/lend` 直下への読み書き拒否、相対パスセグメントでの通信、backend 層での読み取り専用強制、context メッセージのみでの告知、貸し手プロセス側での最終アクセスからの自動切断期限の管理を守ってください。
+  自動切断までの時間は設定の「アプリ → フォルダー共有」で選び、シェルが `grants` 行の `idleMs` で貸し手プロセスへ渡します。`null` は自動切断なしを表します。
   コンポーザの共有中枠（`--share`）は `packages/web/src/styles/composer.css` で `:focus-within` より後に定義します。
 
 ## 7. ツール、メディア、認証の実装規約

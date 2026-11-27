@@ -41,18 +41,19 @@ import { OS } from "@lumisca/core/platform";
  * A file past it is refused with a note pointing at a line range. */
 const MAX_READ_BYTES = 4 * 1024 * 1024;
 
-/** How long a folder stays lent after the agent last touched it.
+/** The default time a folder stays lent after the agent last touched it.
  *
  * The loan is not a session with a start and an end: it follows the work. A
  * conversation that reads a file and then sits for an hour on something else
  * should not keep the user's disk open just because the window is open, and a
  * conversation that keeps reading the same folder should not have to be
- * re-lent every half hour. Both are answered by one clock that every access
+ * re-lent every time. Both are answered by one clock that every access
  * pushes forward.
  *
  * The lender owns that clock because the lender is what sees the accesses:
  * the server only forwards calls, and a rule kept on both sides would drift.
- */
+ * The shell's settings page chooses the length (5, 10, 15 or 30 minutes) or
+ * turns the clock off, and every `grants` line carries the choice. */
 export const SHARE_IDLE_MS = 30 * 60_000;
 
 /** One folder the shell allows this process to lend. */
@@ -68,7 +69,13 @@ export interface LocalGrant {
 /** What the shell writes on this process's stdin, one JSON object per line. */
 type LenderCommand =
   | { type: "hello"; url: string; token: string }
-  | { type: "grants"; grants: LocalGrant[] };
+  | {
+      type: "grants";
+      grants: LocalGrant[];
+      /** The idle deadline in ms, `null` for none, `undefined` when the
+       * line did not carry one (an older shell: keep the current value). */
+      idleMs?: number | null;
+    };
 
 export interface ShareHostOptions {
   /** Where connection trouble is reported (stderr in production). */
@@ -76,8 +83,10 @@ export interface ShareHostOptions {
   /** First reconnect delay; doubles up to `maxRetryMs`. */
   retryMs?: number;
   maxRetryMs?: number;
-  /** How long a loan survives without an access; tests shorten it. */
-  idleMs?: number;
+  /** How long a loan survives without an access; tests shorten it. `null`
+   * keeps every loan until it is withdrawn or the process closes. A
+   * `grants` line from the shell overrides this at run time. */
+  idleMs?: number | null;
   /** Called with the grants that ended by themselves. The shell keeps its
    * own copy of the list to build the next announcement from; unless it
    * hears this, its next change would lend a folder that has already ended
@@ -112,7 +121,8 @@ export function createShareHost(
   const log = options.log ?? (() => {});
   const retryMs = options.retryMs ?? 500;
   const maxRetryMs = options.maxRetryMs ?? 30_000;
-  const idleMs = options.idleMs ?? SHARE_IDLE_MS;
+  let idleMs: number | null =
+    options.idleMs === undefined ? SHARE_IDLE_MS : options.idleMs;
   const now = options.now ?? Date.now;
   const clientId = crypto.randomUUID();
   const host = describeHost();
@@ -150,7 +160,7 @@ export function createShareHost(
       taken.push(name);
       const used = lastUsed.get(grant.id) ?? at;
       return {
-        ...describeGrant(grant, host, used + idleMs),
+        ...describeGrant(grant, host, idleMs === null ? null : used + idleMs),
         name,
       };
     });
@@ -294,11 +304,22 @@ export function createShareHost(
     connect();
   };
 
-  const applyGrants = (next: readonly LocalGrant[]): void => {
+  const applyGrants = (
+    next: readonly LocalGrant[],
+    idle: number | null | undefined,
+  ): void => {
     const at = now();
-    // A grant that is still lent keeps its clock: re-announcing the list
-    // (another folder was added, a term changed) must not hand every loan a
-    // fresh half hour.
+    // A new deadline starts now for the folders already lent: the user just
+    // chose a length, and counting an access from before that choice would
+    // end a loan they were not expecting to lose. (A list re-announced with
+    // the same deadline keeps every clock, so adding one folder does not hand
+    // the others a fresh one.)
+    if (idle !== undefined && idle !== idleMs) {
+      idleMs = idle;
+      for (const id of lastUsed.keys()) lastUsed.set(id, at);
+      scheduleIdle();
+    }
+    // A grant that is still lent keeps its clock.
     for (const grant of next) {
       if (!lastUsed.has(grant.id)) lastUsed.set(grant.id, at);
     }
@@ -319,9 +340,13 @@ export function createShareHost(
    * list it was last told about — a folder that quietly stopped working would
    * sit there looking available. */
   const expireIdle = (): void => {
+    if (idleMs === null) return;
+    // Read once: the field can change while the filter runs, and one pass
+    // must decide every folder with the same deadline.
+    const deadline = idleMs;
     const at = now();
     const kept = grants.filter(
-      (grant) => (lastUsed.get(grant.id) ?? at) + idleMs > at,
+      (grant) => (lastUsed.get(grant.id) ?? at) + deadline > at,
     );
     if (kept.length === grants.length) return;
     for (const grant of grants) {
@@ -334,17 +359,27 @@ export function createShareHost(
     mounts.clear();
     announce();
     options.onExpired?.(ended);
-    log(`loan expired after ${Math.round(idleMs / 60_000)} min of no use`);
+    log(`loan expired after ${Math.round(deadline / 60_000)} min of no use`);
   };
-  // A quarter of the deadline (at most every 30 s): the delivery of an
-  // expiry is allowed to be late, but never early.
-  idleTimer = setInterval(
-    expireIdle,
-    Math.max(10, Math.min(30_000, Math.floor(idleMs / 4))),
-  );
-  // The process lives as long as its stdin; the timer alone must not keep
-  // it (or a test) alive.
-  (idleTimer as { unref?: () => void }).unref?.();
+  /** The tick of the idle clock, and the place that (re)starts it: the
+   * deadline can change while the process runs, and `null` stops the clock.
+   * A quarter of the deadline (at most every 30 s) means an expiry is
+   * delivered late, but never early. */
+  const scheduleIdle = (): void => {
+    if (idleTimer !== undefined) {
+      clearInterval(idleTimer);
+      idleTimer = undefined;
+    }
+    if (idleMs === null) return;
+    idleTimer = setInterval(
+      expireIdle,
+      Math.max(10, Math.min(30_000, Math.floor(idleMs / 4))),
+    );
+    // The process lives as long as its stdin; the timer alone must not keep
+    // it (or a test) alive.
+    (idleTimer as { unref?: () => void }).unref?.();
+  };
+  scheduleIdle();
 
   return {
     command(line: string): void {
@@ -357,7 +392,7 @@ export function createShareHost(
         if (!same) restart();
         return;
       }
-      applyGrants(parsed.grants);
+      applyGrants(parsed.grants, parsed.idleMs);
     },
     close(): void {
       stopped = true;
@@ -533,7 +568,7 @@ export function describeHost(): ShareHostInfo {
 function describeGrant(
   grant: LocalGrant,
   host: ShareHostInfo,
-  expiresAt: number,
+  expiresAt: number | null,
 ): Omit<FolderGrant, "name"> {
   return {
     id: grant.id,
@@ -569,7 +604,18 @@ function parseCommand(line: string): LenderCommand | undefined {
           .map((entry) => parseLocalGrant(entry))
           .filter((grant): grant is LocalGrant => grant !== undefined)
       : [];
-    return { type: "grants", grants };
+    return { type: "grants", grants, idleMs: parseIdle(record.idleMs) };
+  }
+  return undefined;
+}
+
+/** The idle deadline a `grants` line carries: `null` turns the clock off,
+ * a positive number is milliseconds, and anything else — including the field
+ * being absent, as an older shell writes it — means "keep the current one". */
+function parseIdle(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
   }
   return undefined;
 }
