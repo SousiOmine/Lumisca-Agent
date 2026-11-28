@@ -1003,6 +1003,41 @@ test("a square phone can scroll the machine's pane", async () => {
   );
 });
 
+test("the information panel's lower half scrolls as one column", async () => {
+  // The pane used to scroll only the loans. The settings section lives under
+  // them, and a second scroll area in a 240-560px column would make the
+  // reader guess which one moves; the two sections share one scroll instead.
+  // On a phone the pane itself scrolls, so the info area must not nest one.
+  const css = await fsp.readFile(
+    new URL("./styles/stella.css", import.meta.url),
+    "utf8",
+  );
+  const rules = cssRules(css);
+  assertEquals(
+    declarations(rules, ".stella-pane-info").get("overflow-y"),
+    "auto",
+    "the info area is the pane's scroll",
+  );
+  assertEquals(
+    declarations(rules, ".stella-shares").get("flex"),
+    "none",
+    "the loans must not claim the scroll that the info area owns",
+  );
+  const phone = rules
+    .filter(
+      (rule) =>
+        rule.media?.includes("max-width: 600px") === true &&
+        rule.selector === ".stella-pane-info",
+    )
+    .pop();
+  assertEquals(phone !== undefined, true, "the info area needs a phone rule");
+  assertEquals(
+    /overflow:\s*visible/.test(phone!.body),
+    true,
+    "the phone scrolls the pane, not the info area inside it",
+  );
+});
+
 test("the pane's width follows its box, never the conversation", async () => {
   // The pane's width transition smooths a viewport resize. Its arrival and
   // departure are a margin animation in StellaPane: the pane's box keeps the

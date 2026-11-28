@@ -19,6 +19,7 @@ import type {
   StellaHandover,
   StellaMachineStatus,
 } from "../types.ts";
+import { AgentSettingsPanel } from "./stella/AgentSettingsPanel.tsx";
 import { ShareList } from "./stella/ShareList.tsx";
 import { StellaHandoverForm } from "./stella/StellaHandoverForm.tsx";
 import { StellaMachineScreen } from "./stella/StellaMachineScreen.tsx";
@@ -92,9 +93,14 @@ interface StellaPaneProps {
    * the way to take it back has to be where the loan is named. */
   shares: readonly FolderShare[];
   /** The agent whose conversation this is: the clipboard crosses through that
-   * conversation's API. Null while no conversation exists (the pane then has
-   * nothing to exchange text with). */
+   * conversation's API, and the settings at the bottom of the pane are that
+   * agent's. Null while no conversation exists (the pane then has nothing to
+   * exchange text with and no settings to show). */
   agentId: string | null;
+  /** The agent is switched off: its routines stay readable in the settings
+   * section, but the run button is refused by the same rule the server
+   * applies. */
+  agentDisabled: boolean;
   /** The pane is on its way out (see StellaView and hooks/usePresence). It
    * plays its exit and then calls `onExitDone`. */
   exiting?: boolean;
@@ -118,6 +124,7 @@ export function StellaPane({
   onActivity,
   shares,
   agentId,
+  agentDisabled,
   handover,
   onFinishHandover,
   onClose,
@@ -380,7 +387,10 @@ export function StellaPane({
         clientRef={clientRef}
         onClipboardSignal={clipboard.signal}
       />
-      <ShareList shares={shares} />
+      <div className="stella-pane-info">
+        <ShareList shares={shares} />
+        <AgentSettingsPanel agentId={agentId} agentDisabled={agentDisabled} />
+      </div>
     </aside>
   );
 }

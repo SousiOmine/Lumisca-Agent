@@ -544,6 +544,9 @@ export function StellaView({
           onActivity={agentMachine.touch}
           shares={shares}
           agentId={agent?.id ?? null}
+          agentDisabled={
+            disabled || (agent !== null && agent.disabledAt !== null)
+          }
           handover={
             handover === null
               ? null

@@ -89,6 +89,12 @@ test("StellaView: the pane is the conversation's information", () => {
   // The choice is the caller's, so opening it has to be enough to draw it.
   const opened = render({ screenOpen: true });
   assertStringIncludes(opened, "stella-pane");
+  // The panel also carries the open agent's settings. The routine list is
+  // read only when the reader opens the item, so a closed panel adds the
+  // heading and the row, not a request or a list.
+  assertStringIncludes(opened, ">設定<");
+  assertStringIncludes(opened, ">ルーチン<");
+  assertEquals(opened.includes("routine-panel"), false);
   // Watching is not driving: the clipboard controls belong to the hand-over
   // (the server refuses a write outside it, and the buttons would be dead).
   assertEquals(opened.includes("stella-handover-clipboard"), false);
@@ -105,9 +111,10 @@ test("StellaView: the pane is the conversation's information", () => {
 });
 
 test("StellaView: the panel is named without a title row", () => {
-  // The two sections inside the panel (the screen and the lent folders) name
-  // themselves, so a heading over them said it twice and took a row for it.
-  // The region keeps its name for assistive technology.
+  // The sections inside the panel (the screen, the lent folders and the
+  // agent's settings) name themselves, so a heading over them said it twice
+  // and took a row for it. The region keeps its name for assistive
+  // technology.
   const html = render({ screenOpen: true });
   assertStringIncludes(html, 'aria-label="情報"');
   assertEquals(html.includes(">情報<"), false);

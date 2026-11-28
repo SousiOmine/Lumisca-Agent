@@ -365,8 +365,9 @@ export const chat = {
     ja: "名前・アイコン・モデルを編集",
     en: "Edit name, icon and model",
   },
-  /** The row menu's way into the agent's schedule. Routines belong to one
-   * agent, so they open from its row rather than from the app's settings. */
+  /** The row menu's and the information panel's name for the agent's
+   * schedule. Routines belong to one agent, so they open from that agent's
+   * surfaces rather than from the app's settings. */
   "chat.stella.agents.routines": { ja: "ルーチン", en: "Routines" },
   /** The row menu's switch. Off is a state of the agent, not of a session:
    * a disabled agent keeps its history readable and does nothing else. */
@@ -530,9 +531,12 @@ export const chat = {
   "chat.stella.machine.wake": { ja: "起動する", en: "Wake" },
   "chat.stella.machine.waking": { ja: "起動しています…", en: "Waking…" },
   /** The right-hand panel's name for assistive technology. The panel carries
-   * no visible title: its two sections (the screen and the lent folders) name
-   * themselves. */
+   * no visible title: its sections (the screen, the lent folders and the
+   * agent's settings) name themselves. */
   "chat.stella.machine.info": { ja: "情報", en: "Info" },
+  /** The settings group at the bottom of the information panel. Its items
+   * belong to the open agent, so this is not the app's settings dialog. */
+  "chat.stella.agentSettings.title": { ja: "設定", en: "Settings" },
   "chat.stella.share.open": {
     ja: "フォルダーで共同作業",
     en: "Share a folder",

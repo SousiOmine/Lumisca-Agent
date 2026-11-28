@@ -580,6 +580,20 @@
   }
 }
 
+/* The information panel is 240-560px wide whatever the window is, so its rows
+ * stack there even when the viewport query above does not fire. The panel
+ * passes the compact variant; its width cannot be read from a viewport media
+ * query. */
+.routine-panel.compact .routine-row {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px 10px;
+}
+
+.routine-panel.compact .routine-actions {
+  justify-content: flex-start;
+}
+
 /* --- stella: the conversation -------------------------------------------- */
 
 .stella {
@@ -1218,9 +1232,9 @@
 
 /* --- stella: the information panel's lent folders ------------------------ */
 
-/* The panel holds two things: the folders this computer lent and the machine's
- * screen. Both are facts about the conversation that its text cannot carry, so
- * they share one column with a small heading each. */
+/* The panel holds the machine's screen, the folders this computer lent and
+ * the agent's settings. Each is a fact about the conversation that its text
+ * cannot carry, so they share one column with a small heading each. */
 .stella-pane-section {
   margin: 0;
   padding: 9px 12px 4px;
@@ -1229,14 +1243,71 @@
   color: var(--text-dim);
 }
 
-/* The screen keeps the machine's own ratio, so the pane has no dead black
- * band above and below the picture; the loans take the rest of the column and
- * scroll there when there are several. */
-.stella-shares {
+/* The panel's lower half: the lent folders and the agent's settings share one
+ * scroll. Two independent scroll areas in a 240-560px column gave the reader
+ * two places to scroll and no rule for which one moved. */
+.stella-pane-info {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The screen keeps the machine's own ratio, so the pane has no dead black
+ * band above and below the picture; the loans keep their own height and the
+ * info area scrolls them together with the settings below. */
+.stella-shares {
+  flex: none;
   border-top: 1px solid var(--border);
+}
+
+/* --- stella: the agent's settings in the information panel --------------- */
+
+.stella-agent-settings {
+  border-top: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+/* One settings item. The row is the whole width of the panel so the target
+ * matches the one the list's folds offer, and the hover fill explains that
+ * the row opens something. */
+.stella-settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--type-12-5);
+  text-align: left;
+  cursor: pointer;
+}
+
+.stella-settings-toggle:hover {
+  background: var(--surface-2);
+}
+
+.stella-settings-chevron {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--text-dim);
+  transition: transform var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.stella-settings-toggle[aria-expanded="true"] .stella-settings-chevron {
+  transform: rotate(90deg);
+}
+
+/* The body is mounted only while the item is open, so this padding is not a
+ * collapsed row's leftover: it is the gap the list needs from its toggle. */
+.stella-settings-body {
+  padding: 2px 10px 0;
 }
 
 .stella-share-list {
@@ -1605,6 +1676,17 @@
   }
 }
 
+/* A tablet keeps the pane as a strip under the conversation. With the
+ * settings item open that strip was a few rows tall, and the list scrolled in
+ * a slot barely taller than its heading. The pane grows while the item is
+ * open. The phone below is the whole screen already and does not take this
+ * rule. */
+@media (min-width: 601px) and (max-width: 900px) {
+  .stella-pane:has(.stella-settings-body) {
+    max-height: 70vh;
+  }
+}
+
 /* --- stella: the screen hand-over ---------------------------------------- */
 
 /* While the agent waits for the user, the pane is theirs: the header and the
@@ -1900,6 +1982,14 @@
    * reached even by scrolling. */
   .stella-shares {
     flex: none;
+  }
+
+  /* The info area gives up its own scroll: a second region inside the sheet
+   * fights the finger that is already moving the sheet. Its bottom padding
+   * keeps the last section off the home indicator, whichever one is last. */
+  .stella-pane-info {
+    flex: none;
+    overflow: visible;
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
