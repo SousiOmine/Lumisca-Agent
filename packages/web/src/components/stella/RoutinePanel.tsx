@@ -32,11 +32,11 @@ import type { RoutineView } from "../../types.ts";
  * last run went — and the four actions that belong to a person's judgment:
  * turn it off, run it now, stop a run, delete it.
  *
- * It opens from the agent's own row in the list (StellaSidebar), not from the
- * settings dialog: a routine belongs to ONE agent, and the settings dialog
- * holds the installation's settings. The row is also where the reader knows
- * which agent they are looking at, so the list never has to say "pick an
- * agent first".
+ * It opens from the agent's own row in the list (StellaSidebar) and from the
+ * agent's settings in the information panel (AgentSettingsPanel), never from
+ * the app's settings dialog: a routine belongs to ONE agent, and that dialog
+ * holds the installation's settings. Both ways in draw this panel through
+ * AgentRoutines, so they cannot drift apart.
  *
  * The list polls only while something is running: "running now" is the one
  * fact that changes without a request from this screen.
@@ -262,6 +262,10 @@ export interface RoutinePanelProps {
   onRun: (id: string) => Promise<void>;
   onStop: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  /** Stack the row for a narrow column. The information panel passes this:
+   * its width is 240-560px whatever the window is, so the viewport's media
+   * query cannot say whether the row has room for its actions beside it. */
+  compact?: boolean;
 }
 
 /**
@@ -281,6 +285,7 @@ export function RoutinePanel({
   onRun,
   onStop,
   onDelete,
+  compact = false,
 }: RoutinePanelProps) {
   const t = useT();
   const locale = useLocale();
@@ -321,7 +326,7 @@ export function RoutinePanel({
   }, []);
 
   return (
-    <div className="routine-panel">
+    <div className={`routine-panel${compact ? " compact" : ""}`}>
       <div className="routine-head">
         <button
           type="button"

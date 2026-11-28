@@ -26,7 +26,11 @@ function routine(overrides: Partial<RoutineView> = {}): RoutineView {
   };
 }
 
-function html(routines: RoutineView[], agentDisabled = false): string {
+function html(
+  routines: RoutineView[],
+  agentDisabled = false,
+  compact = false,
+): string {
   return renderToString(
     createElement(RoutinePanel, {
       routines,
@@ -38,6 +42,7 @@ function html(routines: RoutineView[], agentDisabled = false): string {
       onRun: () => Promise.resolve(),
       onStop: () => Promise.resolve(),
       onDelete: () => Promise.resolve(),
+      compact,
     }),
   );
 }
@@ -80,4 +85,13 @@ test("a disabled agent's routines say they do not run", () => {
   // An enabled agent keeps the list as it was.
   const on = html([routine()], false);
   assertEquals(on.includes("無効化されているため"), false);
+});
+
+test("the information panel asks for the stacked row", () => {
+  // The panel is 240-560px wide whatever the window is, so the same list is
+  // drawn in a column there. The variant is a layout choice, not a second
+  // list: the rows, the badges and the actions stay the same.
+  const panel = html([routine()], false, true);
+  assertStringIncludes(panel, 'class="routine-panel compact"');
+  assertStringIncludes(html([routine()]), 'class="routine-panel"');
 });

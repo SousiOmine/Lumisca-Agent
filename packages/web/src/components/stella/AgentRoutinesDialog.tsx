@@ -1,9 +1,8 @@
 import { IconX } from "@tabler/icons-preact";
-import { useRoutines } from "../../hooks/useRoutines.ts";
 import { useT } from "../../i18n.ts";
 import type { StellaAgentSummary } from "../../types.ts";
 import { Modal } from "../Modal.tsx";
-import { RoutinePanel } from "./RoutinePanel.tsx";
+import { AgentRoutines } from "./AgentRoutines.tsx";
 
 export interface AgentRoutinesDialogProps {
   agent: StellaAgentSummary;
@@ -19,15 +18,15 @@ export interface AgentRoutinesDialogProps {
  * row is the honest way in — the reader picks the agent they mean, and the
  * list is that agent's whether or not its conversation is on screen.
  *
- * The hook owns the list, so the dialog is a shell: a title, a close, and the
- * list itself.
+ * The body is AgentRoutines, the same component the information panel's
+ * settings section draws, so the two ways in list the same rows with the same
+ * polling and actions. The dialog is only the title and the close.
  */
 export function AgentRoutinesDialog({
   agent,
   onClose,
 }: AgentRoutinesDialogProps) {
   const t = useT();
-  const routines = useRoutines(agent.id);
   return (
     <Modal
       onClose={onClose}
@@ -49,16 +48,9 @@ export function AgentRoutinesDialog({
               <IconX size={15} />
             </button>
           </div>
-          <RoutinePanel
-            routines={routines.routines}
+          <AgentRoutines
+            agentId={agent.id}
             agentDisabled={agent.disabledAt !== null}
-            loading={routines.loading}
-            error={routines.error}
-            onRefresh={routines.refresh}
-            onSetEnabled={routines.setEnabled}
-            onRun={routines.run}
-            onStop={routines.stop}
-            onDelete={routines.remove}
           />
         </>
       )}
