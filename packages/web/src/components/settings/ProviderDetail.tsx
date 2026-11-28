@@ -402,14 +402,14 @@ export function ProviderDetail({
       <SettingsSubHeader onBack={onBack} title={provider?.name ?? providerId}>
         {auth.configured ? (
           <span className="provider-state configured">
-            <IconCheck size={12} />{" "}
+            <IconCheck size={14} />{" "}
             {isOAuth
               ? t("settings.provider.loginStatus")
               : t("settings.provider.configured")}
           </span>
         ) : (
           <span className="provider-state">
-            <IconCircleDashed size={12} />{" "}
+            <IconCircleDashed size={14} />{" "}
             {t("settings.provider.notConfigured")}
           </span>
         )}

@@ -37,8 +37,11 @@
   .cursor,
   .spin,
   .stella-typing-dot,
-  .loading-skeleton-line {
+  .loading-skeleton-line,
+  .agent-activity-thinking {
     animation: none;
+    mask-image: none;
+    -webkit-mask-image: none;
   }
 
   /* Entrances: keep the arrival, drop the travel. Listed one selector per
@@ -53,6 +56,7 @@
   .agent-work-log,
   .stella-msg,
   .stella-running,
+  .stella-activity-label,
   .env-request-card,
   .share-request-card,
   .stella-main,
@@ -143,6 +147,7 @@
   .stella-settings-chevron,
   .stella-agent,
   .stella-titlebar-avatar,
+  .stella-sidebar-toggle,
   .stella-search-toggle,
   .stella-screen-toggle,
   .msg-action-btn,

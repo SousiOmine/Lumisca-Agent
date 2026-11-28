@@ -152,6 +152,7 @@ export const ConversationTurn = memo(function ConversationTurn({
   visualBase,
   attachBase,
   running,
+  thinking = false,
   endedAt,
   onRewind,
   onCardSend,
@@ -169,6 +170,8 @@ export const ConversationTurn = memo(function ConversationTurn({
   /** Attachment base of the session (the files chat_attach sent). */
   attachBase: string;
   running: boolean;
+  /** True while the turn is awaiting its first token or thinking. */
+  thinking?: boolean;
   endedAt?: number;
   onRewind: (
     timestamp: number,
@@ -251,6 +254,7 @@ export const ConversationTurn = memo(function ConversationTurn({
           startedAt={startedAt}
           endedAt={running ? undefined : completionTime}
           running={running}
+          thinking={thinking && turn.responses.length === 0}
           expanded={running || expanded}
           expandable={!running && expandable}
           onToggle={() => {

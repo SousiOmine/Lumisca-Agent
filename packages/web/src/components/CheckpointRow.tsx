@@ -12,7 +12,7 @@ export function CheckpointRow({ message }: { message: CheckpointMessage }) {
       title={message.title}
       body={message.body}
       status="neutral"
-      icon={<IconArrowsMinimize size={13} />}
+      icon={<IconArrowsMinimize size={14} />}
     />
   );
 }

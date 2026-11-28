@@ -40,6 +40,8 @@ interface TranscriptProps {
   runningTools: SessionView["runningTools"];
   /** True while a run is active (the last turn then renders as running). */
   running: boolean;
+  /** True while the active run is thinking or awaiting its first token. */
+  thinking?: boolean;
   agentEndedAt?: number;
   error?: string;
   /** Resolves a `visual:` image reference (see api-client). */
@@ -93,6 +95,7 @@ export function Transcript({
   liveTools,
   runningTools,
   running,
+  thinking = false,
   agentEndedAt,
   error,
   visualBase,
@@ -184,6 +187,7 @@ export function Transcript({
               visualBase={visualBase}
               attachBase={attachBase}
               running={running && index === rows.length - 1}
+              thinking={thinking && index === rows.length - 1}
               endedAt={index === rows.length - 1 ? agentEndedAt : undefined}
               onRewind={onRewind}
               onCardSend={onCardSend}

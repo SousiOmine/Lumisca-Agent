@@ -383,6 +383,11 @@ export function ChatView({
         liveTools={view.liveTools}
         runningTools={view.runningTools}
         running={isRunning}
+        thinking={
+          isRunning &&
+          (view.thinkingStartAt !== undefined ||
+            (view.streamingText.length === 0 && view.liveTools.length === 0))
+        }
         agentEndedAt={view.agentEndedAt}
         error={view.error}
         visualBase={visualBase}

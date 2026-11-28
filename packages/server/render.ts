@@ -115,11 +115,11 @@ export function renderHtmlDocument(
   options: HtmlDocumentOptions,
 ): string {
   return `<!doctype html>
-<html lang="${options.language}" data-theme="dark">
+<html lang="${options.language}" data-theme="light">
   <head>
 ${shellHeadTags({
   csp: pageCsp(options.pageHost),
-  themeColor: THEME_COLORS.dark,
+  themeColor: THEME_COLORS.light,
 })}
     <script src="/assets/theme.js"></script>
     <style>${css}</style>
@@ -146,12 +146,12 @@ ${shellHeadTags({
  */
 export function renderDesktopDocument(): string {
   return `<!doctype html>
-<html lang="ja" data-theme="dark">
+<html lang="ja" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark light" />
-    <meta name="theme-color" content="${THEME_COLORS.dark}" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="${THEME_COLORS.light}" />
     <title>Lumisca</title>
     <script src="/assets/theme.js"></script>
     <link rel="stylesheet" href="/assets/styles.css" />

@@ -33,7 +33,7 @@ export function ProviderRow({
       )}
       {onOpen !== undefined && (
         <span className="provider-row-chevron" aria-hidden="true">
-          <IconChevronRight size={15} />
+          <IconChevronRight size={16} />
         </span>
       )}
     </>

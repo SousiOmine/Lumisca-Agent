@@ -357,6 +357,27 @@ export function App({ initialData }: AppProps): ReactElement {
   // phone widths, where the list and the conversation are one screen each —
   // so it cannot belong to either.
   const [stellaScreenOpen, setStellaScreenOpen] = useState(false);
+  const [stellaSidebarCollapsed, setStellaSidebarCollapsed] = useState(() => {
+    try {
+      return globalThis.localStorage?.getItem("lumisca.stellaSidebar") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleStellaSidebar = useCallback(() => {
+    setStellaSidebarCollapsed((collapsed) => {
+      const next = !collapsed;
+      try {
+        globalThis.localStorage?.setItem(
+          "lumisca.stellaSidebar",
+          next ? "1" : "0",
+        );
+      } catch {
+        // Ignore storage errors in restricted WebViews.
+      }
+      return next;
+    });
+  }, []);
   const [stellaSearchOpen, setStellaSearchOpen] = useState(false);
   const [editingStellaAgent, setEditingStellaAgent] = useState(false);
   const [creatingStellaAgent, setCreatingStellaAgent] = useState(false);
@@ -385,6 +406,8 @@ export function App({ initialData }: AppProps): ReactElement {
         agentId: stellaAgentId,
         singleScreen: stellaSingleScreen,
         onBack: nav.goToStellaList,
+        onToggleSidebar: toggleStellaSidebar,
+        sidebarCollapsed: stellaSidebarCollapsed,
         onEditAgent: () => setEditingStellaAgent(true),
         // A disabled agent has no screen to show: its desktop was given back
         // when it was switched off, and asking for it would start the one
@@ -527,6 +550,7 @@ export function App({ initialData }: AppProps): ReactElement {
             onOpenSettings={nav.openProviders}
             screenOpen={stellaScreenOpen}
             onScreenOpenChange={setStellaScreenOpen}
+            sidebarCollapsed={stellaSidebarCollapsed}
             searchOpen={stellaSearchOpen}
             onSearchOpenChange={setStellaSearchOpen}
           />

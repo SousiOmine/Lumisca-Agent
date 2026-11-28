@@ -59,7 +59,7 @@ export function WorkspacePicker({
           {selected ? selected.name : t("chrome.workspacePicker.none")}
         </span>
         <span className={`workspace-picker-chevron${open ? " open" : ""}`}>
-          <IconChevronDown size={15} />
+          <IconChevronDown size={16} />
         </span>
       </button>
 

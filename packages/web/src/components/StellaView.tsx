@@ -439,7 +439,7 @@ export function StellaView({
               role="status"
               title={shares.map((share) => share.path).join("\n")}
             >
-              <IconFolderShare size={13} className="share-notice-icon" />
+              <IconFolderShare size={14} className="share-notice-icon" />
               {shares.length === 1
                 ? t("chat.stella.share.activeOne")
                 : t("chat.stella.share.active", { count: shares.length })}

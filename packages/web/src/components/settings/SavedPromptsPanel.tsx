@@ -128,7 +128,7 @@ export function SavedPromptsPanel() {
                 aria-label={t("common.edit")}
                 onClick={() => startEditing(prompt)}
               >
-                <IconEdit size={13} />
+                <IconEdit size={14} />
               </button>
               <button
                 type="button"
@@ -137,7 +137,7 @@ export function SavedPromptsPanel() {
                 aria-label={t("common.delete")}
                 onClick={() => void remove(prompt.id)}
               >
-                <IconTrash size={13} />
+                <IconTrash size={14} />
               </button>
             </div>
           </div>

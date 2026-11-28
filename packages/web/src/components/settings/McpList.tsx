@@ -160,7 +160,7 @@ export function McpList() {
                 <span className="provider-state configured">
                   {s.status === "ok" ? (
                     <>
-                      <IconPlugConnected size={12} />
+                      <IconPlugConnected size={14} />
                       {t("settings.mcp.toolCount", {
                         count: s.toolCount,
                       })}
@@ -168,9 +168,9 @@ export function McpList() {
                   ) : s.status === "error" ? (
                     <>
                       {s.needsAuth ? (
-                        <IconLogin2 size={12} />
+                        <IconLogin2 size={14} />
                       ) : (
-                        <IconAlertTriangle size={12} />
+                        <IconAlertTriangle size={14} />
                       )}
                       {s.needsAuth
                         ? t("settings.mcp.authNeeded")
@@ -178,7 +178,7 @@ export function McpList() {
                     </>
                   ) : (
                     <>
-                      <IconCircleDashed size={12} />
+                      <IconCircleDashed size={14} />
                       {t("settings.mcp.notStarted")}
                     </>
                   )}
@@ -209,9 +209,9 @@ export function McpList() {
                   onClick={() => void signIn.start(s)}
                 >
                   {signIn.pending ? (
-                    <IconLoader2 size={13} className="spin" />
+                    <IconLoader2 size={14} className="spin" />
                   ) : (
-                    <IconExternalLink size={13} />
+                    <IconExternalLink size={14} />
                   )}
                   {signIn.pending
                     ? t("settings.mcp.authWaiting")
@@ -227,9 +227,9 @@ export function McpList() {
                     onClick={() => void signIn.copyUrl()}
                   >
                     {signIn.copied ? (
-                      <IconCheck size={13} />
+                      <IconCheck size={14} />
                     ) : (
-                      <IconCopy size={13} />
+                      <IconCopy size={14} />
                     )}
                     {signIn.copied
                       ? t("settings.mcp.authCopied")
@@ -242,7 +242,7 @@ export function McpList() {
                 title={t("common.delete")}
                 onClick={() => remove(s.name)}
               >
-                <IconTrash size={13} />
+                <IconTrash size={14} />
                 {t("common.delete")}
               </button>
             </div>

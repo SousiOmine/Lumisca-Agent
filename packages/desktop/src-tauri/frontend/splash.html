@@ -2,19 +2,20 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="light" />
     <title>Lumisca</title>
     <style>
       /* Splash shown while the desktop shell starts the bundled server.
-         Colors match the app's dark theme (packages/web/src/styles/tokens.css). */
+         Colors match the app's light default theme (packages/web/src/styles/tokens.css). */
       :root {
-        --bg: #0c0c11;
-        --surface: #15151b;
-        --border: #26262f;
-        --text: #f3f3f7;
-        --text-dim: #a5a5b2;
-        --accent: #f3f3f7;
-        --error: #ff9a90;
+        --bg: #f4f5f9;
+        --surface: #ffffff;
+        --surface-3: #eceef4;
+        --border: #e6e8f0;
+        --text: #191920;
+        --text-dim: #52525e;
+        --accent: #191920;
+        --error: #c42b1c;
       }
       * {
         box-sizing: border-box;
@@ -23,11 +24,13 @@
       body {
         height: 100%;
         margin: 0;
+        background: var(--bg);
       }
       body {
-        background: var(--bg);
         color: var(--text);
-        font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+          "Segoe UI Variable", "Segoe UI", "Noto Sans JP", sans-serif;
         display: flex;
         flex-direction: column;
         user-select: none;
@@ -56,7 +59,6 @@
         padding: 0 12px;
         font-size: 12px;
         font-weight: 600;
-        letter-spacing: 0.04em;
         color: var(--text-dim);
       }
       .titlebar-controls {
@@ -76,11 +78,12 @@
         cursor: pointer;
       }
       .titlebar-btn:hover {
-        background: #23232d;
-        color: #ffffff;
+        background: var(--surface-3);
+        color: var(--text);
       }
       .titlebar-btn.close:hover {
         background: #c42b1c;
+        color: #ffffff;
       }
       .hidden {
         display: none;
@@ -96,14 +99,13 @@
       .wordmark {
         font-size: 28px;
         font-weight: 600;
-        letter-spacing: 0.02em;
         margin-bottom: 28px;
       }
       .spinner {
         width: 28px;
         height: 28px;
-        margin: 0 auto 18px;
-        border: 3px solid rgba(255, 255, 255, 0.15);
+        margin: 0 auto 16px;
+        border: 3px solid rgba(25, 25, 32, 0.14);
         border-top-color: var(--accent);
         border-radius: 50%;
         animation: spin 0.9s linear infinite;
@@ -121,17 +123,17 @@
       .status.error {
         color: var(--error);
         max-width: 420px;
-        line-height: 1.5;
+        line-height: 1.7;
       }
       /* Startup failure with a way out: retry the remembered remote server
          or fall back to the local one. */
       .actions {
         display: flex;
         gap: 8px;
-        margin-top: 18px;
+        margin-top: 16px;
       }
       .btn {
-        padding: 7px 14px;
+        padding: 8px 16px;
         font: inherit;
         font-size: 13px;
         color: var(--text);
@@ -144,7 +146,7 @@
         border-color: var(--text-dim);
       }
       .btn.primary {
-        color: #0c0c11;
+        color: var(--bg);
         background: var(--accent);
         border-color: var(--accent);
         font-weight: 600;

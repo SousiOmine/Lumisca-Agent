@@ -189,7 +189,7 @@ export function WorkspaceModal({
                         setFolders((prev) => prev.filter((p) => p !== f))
                       }
                     >
-                      <IconTrash size={13} />
+                      <IconTrash size={14} />
                       {t("chrome.workspaceModal.removeFolder")}
                     </button>
                   </div>

@@ -55,7 +55,7 @@ export function RecentSessionsList({
             onClick={onReload}
             title={t("common.reload")}
           >
-            <IconRefresh size={13} />
+            <IconRefresh size={14} />
             {t("common.reload")}
           </button>
         )}

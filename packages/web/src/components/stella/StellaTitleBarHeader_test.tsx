@@ -22,6 +22,8 @@ function render(
   overrides: {
     agent?: StellaAgentSummary | null;
     onBack?: () => void;
+    onToggleSidebar?: () => void;
+    sidebarCollapsed?: boolean;
     onEditAgent?: () => void;
     onToggleScreen?: () => void;
     screenOpen?: boolean;
@@ -33,6 +35,12 @@ function render(
       agent: overrides.agent === undefined ? agent : overrides.agent,
       onEditAgent: overrides.onEditAgent ?? (() => {}),
       ...(overrides.onBack === undefined ? {} : { onBack: overrides.onBack }),
+      ...(overrides.onToggleSidebar === undefined
+        ? {}
+        : { onToggleSidebar: overrides.onToggleSidebar }),
+      ...(overrides.sidebarCollapsed === undefined
+        ? {}
+        : { sidebarCollapsed: overrides.sidebarCollapsed }),
       ...(overrides.onToggleScreen === undefined
         ? {}
         : { onToggleScreen: overrides.onToggleScreen }),
@@ -128,4 +136,24 @@ test("StellaTitleBarHeader: the back button appears only when the caller gives o
   const narrow = render({ onBack: () => {} });
   assertStringIncludes(narrow, "stella-back");
   assertStringIncludes(narrow, "エージェント一覧に戻る");
+});
+
+test("StellaTitleBarHeader: the sidebar toggle mirrors the desktop sidebar state", () => {
+  assertEquals(render().includes("stella-sidebar-toggle"), false);
+  const expanded = render({
+    onToggleSidebar: () => {},
+    sidebarCollapsed: false,
+  });
+  assertStringIncludes(expanded, "stella-sidebar-toggle on");
+  assertStringIncludes(expanded, 'aria-pressed="true"');
+  assertStringIncludes(expanded, 'title="サイドバーを隠す"');
+  assertStringIncludes(expanded, 'tabler-icon-layout-sidebar-left-collapse"');
+
+  const collapsed = render({
+    onToggleSidebar: () => {},
+    sidebarCollapsed: true,
+  });
+  assertStringIncludes(collapsed, 'aria-pressed="false"');
+  assertStringIncludes(collapsed, 'title="サイドバーを表示"');
+  assertStringIncludes(collapsed, 'tabler-icon-layout-sidebar-left-expand"');
 });

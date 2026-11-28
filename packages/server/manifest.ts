@@ -4,7 +4,7 @@
  * It is generated per request rather than kept as a file, because the app
  * language is resolved per request (`lang`, and the description under the
  * app's name in the install dialog). The theme is this client's own choice,
- * so the manifest carries the app's dark canvas: a manifest cannot vary by
+ * so the manifest carries the app's light canvas: a manifest cannot vary by
  * client, and the page corrects its own `theme-color` after the first paint.
  *
  * `start_url` names no token. The manifest is one of the files the token
@@ -46,7 +46,7 @@ export interface ManifestOptions {
 
 /** The manifest document, as the JSON text its route answers with. */
 export function renderManifest({ language }: ManifestOptions): string {
-  const color = THEME_COLORS.dark;
+  const color = THEME_COLORS.light;
   return JSON.stringify({
     // A stable identity: without it the browser derives one from start_url,
     // and moving the app to another path would install it a second time.

@@ -8,8 +8,8 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 10px 0;
-  padding: 14px 16px;
+  margin: 12px 0;
+  padding: 16px 16px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -48,7 +48,7 @@
 .app-card-building-text {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .app-card-invalid {
@@ -61,7 +61,7 @@
 }
 
 .app-card-problem {
-  margin-top: 6px;
+  margin-top: 8px;
   color: var(--error);
   font-family: var(--mono);
   font-size: var(--type-11);
@@ -71,13 +71,13 @@
 }
 
 .app-card-invalid summary {
-  margin-top: 6px;
+  margin-top: 8px;
   cursor: pointer;
 }
 
 .app-card-source {
-  margin: 6px 0 0;
-  padding: 8px 10px;
+  margin: 8px 0 0;
+  padding: 8px 12px;
   background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -94,14 +94,14 @@
 .app-screen {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
 .app-stack,
 .app-row {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -141,7 +141,7 @@
 .app-stack[data-gap="s"],
 .app-row[data-gap="s"],
 .app-grid[data-gap="s"] {
-  gap: 6px;
+  gap: 8px;
 }
 
 .app-stack[data-gap="l"],
@@ -152,7 +152,7 @@
 
 .app-grid {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
 }
@@ -174,7 +174,7 @@
   flex-direction: column;
   gap: 8px;
   min-width: 0;
-  padding: 12px 14px;
+  padding: 12px 16px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -286,7 +286,7 @@
   justify-content: center;
   align-self: flex-start;
   min-height: 30px;
-  padding: 6px 14px;
+  padding: 8px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -360,18 +360,19 @@
 .app-input {
   width: 100%;
   min-width: 0;
-  padding: 7px 12px;
+  padding: 8px 12px;
   background: var(--input-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   color: var(--text);
   font-family: var(--ui);
   font-size: var(--type-13);
 }
 
-.app-input:focus-visible {
+/* Pointer focus uses border contrast; keyboard focus keeps the base focus-visible ring. */
+.app-input:focus:not(:focus-visible) {
   outline: none;
-  border-color: var(--border-strong);
+  border-color: var(--text-faint);
 }
 
 .app-input:disabled {
@@ -518,7 +519,7 @@
 }
 
 .app-card .app-table th {
-  padding: 6px 8px;
+  padding: 8px 8px;
   border-bottom: 1px solid var(--border);
   font-weight: 600;
   color: var(--text-dim);
@@ -526,7 +527,7 @@
 }
 
 .app-card .app-table td {
-  padding: 6px 8px;
+  padding: 8px 8px;
   border-bottom: 1px solid var(--border);
   color: var(--text);
   vertical-align: top;
@@ -537,7 +538,7 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 12px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -584,7 +585,7 @@
 }
 
 .app-tab {
-  padding: 6px 10px;
+  padding: 8px 12px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -620,7 +621,7 @@
 }
 
 .app-unknown {
-  padding: 6px 8px;
+  padding: 8px 8px;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius);
   color: var(--error);
@@ -634,9 +635,19 @@
   text-align: center;
 }
 
+@media (hover: none), (pointer: coarse) {
+  .app-input {
+    font-size: var(--type-16);
+  }
+}
+
 /* A phone gets one column: a three-column dashboard at 390px is a column of
  * clipped cells, not a dashboard. Rows wrap for the same reason. */
 @media (max-width: 600px) {
+  .app-input {
+    font-size: var(--type-16);
+  }
+
   .app-grid[data-columns="2"],
   .app-grid[data-columns="3"],
   .app-grid[data-columns="4"] {

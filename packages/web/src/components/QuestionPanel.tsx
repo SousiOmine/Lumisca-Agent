@@ -1,5 +1,12 @@
 import { errorMessage } from "@lumisca/core/shared";
-import { IconMessageQuestion, IconSend } from "@tabler/icons-preact";
+import {
+  IconCircle,
+  IconCircleDot,
+  IconMessageQuestion,
+  IconSend,
+  IconSquare,
+  IconSquareCheck,
+} from "@tabler/icons-preact";
 import { useState } from "preact/hooks";
 import { useT } from "../i18n.ts";
 import type { AskAnswer, AskQuestion, PendingQuestion } from "../types.ts";
@@ -154,8 +161,18 @@ function QuestionCard({
                     className={`question-option${active ? " selected" : ""}`}
                     onClick={() => select(q.id, index, multi)}
                   >
-                    <span className="question-option-mark">
-                      {active ? (multi ? "☑" : "●") : multi ? "☐" : "○"}
+                    <span className="question-option-mark" aria-hidden="true">
+                      {active ? (
+                        multi ? (
+                          <IconSquareCheck size={16} />
+                        ) : (
+                          <IconCircleDot size={16} />
+                        )
+                      ) : multi ? (
+                        <IconSquare size={16} />
+                      ) : (
+                        <IconCircle size={16} />
+                      )}
                     </span>
                     <span className="question-option-label">
                       {option.label}
@@ -192,7 +209,7 @@ function QuestionCard({
             submitting || !allAnswered(pending.questions, selections, customs)
           }
         >
-          <IconSend size={13} />
+          <IconSend size={14} />
           {submitting
             ? t("panels.question.submitting")
             : t("panels.question.submit")}

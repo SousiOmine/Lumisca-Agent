@@ -254,7 +254,7 @@ function TabBarView({
               title={t("chrome.tabBar.closeTab")}
               aria-label={t("chrome.tabBar.closeTabNamed", { name })}
             >
-              <IconX size={13} />
+              <IconX size={14} />
             </button>
           </div>
         );
@@ -266,7 +266,7 @@ function TabBarView({
         title={t("chrome.tabBar.newSession")}
         aria-label={t("chrome.tabBar.newSession")}
       >
-        <IconPlus size={17} />
+        <IconPlus size={16} />
       </button>
       {/* On desktop the app menu lives in the title bar next to the window
        * controls; in a plain browser (no title bar) it stays here. */}

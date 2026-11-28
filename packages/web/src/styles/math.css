@@ -11,7 +11,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   max-width: 100%;
-  padding: 2px 0 6px;
+  padding: 2px 0 8px;
 }
 
 /* One line of a display formula is laid out by the typesetter as
@@ -32,7 +32,7 @@
 /* The source of a formula the typesetter could not take, or one too long to
  * typeset: shown as code so it stays readable and selectable. */
 .math-source {
-  margin: 6px 0;
+  margin: 8px 0;
   overflow-x: auto;
   font-size: var(--type-13);
 }

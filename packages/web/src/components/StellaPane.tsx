@@ -339,9 +339,9 @@ export function StellaPane({
           aria-pressed={fullscreen}
         >
           {fullscreen ? (
-            <IconArrowsMinimize size={15} />
+            <IconArrowsMinimize size={16} />
           ) : (
-            <IconArrowsMaximize size={15} />
+            <IconArrowsMaximize size={16} />
           )}
         </button>
         {onClose !== undefined && (
@@ -352,7 +352,7 @@ export function StellaPane({
             title={t("common.close")}
             aria-label={t("common.close")}
           >
-            <IconX size={15} />
+            <IconX size={16} />
           </button>
         )}
       </header>

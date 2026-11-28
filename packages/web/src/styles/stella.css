@@ -37,7 +37,7 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding-top: 4px;
   overflow-y: auto;
   /* The list travels across the window when a conversation opens, so the
@@ -67,7 +67,7 @@
 
 .stella-sidebar-empty {
   margin: 0;
-  padding: 6px 8px;
+  padding: 8px 8px;
   font-size: var(--type-11-5);
   color: var(--text-dim);
 }
@@ -83,12 +83,12 @@
 .stella-presets {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: -4px 0 14px;
+  gap: 8px;
+  margin: -4px 0 16px;
 }
 
 .stella-preset {
-  padding: 4px 10px;
+  padding: 4px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   background: transparent;
@@ -106,7 +106,7 @@
 /* --- stella: share-a-folder dialog --------------------------------------- */
 
 .stella-share-hint {
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   color: var(--text-dim);
   font-size: var(--type-13);
 }
@@ -114,7 +114,7 @@
 .stella-share-pick {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
@@ -153,7 +153,7 @@
 }
 
 .stella-terms-option {
-  padding: 5px 14px;
+  padding: 4px 16px;
   border-radius: var(--radius-pill);
   color: var(--text-dim);
   font-size: var(--type-13);
@@ -188,7 +188,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 /* The whole-computer half of the dialog: one press, above the one-folder
@@ -210,7 +210,7 @@
 .stella-share-divider {
   border: 0;
   border-top: 1px solid var(--border);
-  margin: 0 0 14px;
+  margin: 0 0 16px;
 }
 
 .stella-share-recent .stella-share-list {
@@ -223,7 +223,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: transparent;
@@ -282,8 +282,8 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 4px 7px 8px;
+  gap: 12px;
+  padding: 8px 4px 8px 8px;
   border: none;
   background: none;
   color: var(--text);
@@ -312,7 +312,7 @@
 .stella-agent-head {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -363,7 +363,7 @@
  * it: a hairline above it says where the working agents end, and the label
  * is smaller than a name so it cannot be mistaken for one. */
 .stella-agent-group {
-  margin-top: 6px;
+  margin-top: 8px;
   padding-top: 4px;
   border-top: 1px solid var(--border);
 }
@@ -371,9 +371,9 @@
 .stella-agent-group-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border: none;
   border-radius: var(--radius);
   background: none;
@@ -455,7 +455,7 @@
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  padding: 10px 12px;
+  padding: 12px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -470,7 +470,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 /* The name and its badges are one line, always: a badge that wrapped under
@@ -479,7 +479,7 @@
  * long name. The name gives way instead (see .routine-name). */
 .routine-title {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   flex-wrap: nowrap;
 }
@@ -502,7 +502,7 @@
 
 .routine-badge {
   flex: none;
-  padding: 0 6px;
+  padding: 0 8px;
   font-size: var(--type-10);
   line-height: 16px;
   white-space: nowrap;
@@ -587,7 +587,7 @@
 .routine-panel.compact .routine-row {
   flex-direction: column;
   align-items: stretch;
-  padding: 8px 10px;
+  padding: 8px 12px;
 }
 
 .routine-panel.compact .routine-actions {
@@ -601,7 +601,7 @@
   min-width: 0;
   min-height: 0;
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
 .stella-main {
@@ -730,7 +730,7 @@
   place-items: center;
   width: 32px;
   height: 32px;
-  margin-left: -6px;
+  margin-left: -8px;
   border: none;
   border-radius: var(--radius-pill);
   background: none;
@@ -770,7 +770,9 @@
   justify-content: center;
   font-weight: 600;
   line-height: 1;
-  background: hsl(var(--agent-avatar-hue) 46% 42%);
+  /* Perceptually uniform lightness keeps white initials >= 5:1 across all 360
+   * hues. */
+  background: oklch(0.52 0.11 var(--agent-avatar-hue));
 }
 
 /* The edit dialog's icon field: the preview beside the hint and the two
@@ -780,7 +782,7 @@
 .agent-icon-field {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .agent-icon-caption {
@@ -791,7 +793,7 @@
 .agent-icon-row {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 16px;
 }
 
 .agent-icon-text {
@@ -840,7 +842,7 @@
 .agent-model-field {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .agent-model-row {
@@ -930,6 +932,39 @@
   margin-left: 2px;
 }
 
+.stella-sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    background var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out),
+    border-color var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.stella-sidebar-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.stella-sidebar-toggle.on {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.stella-sidebar-toggle:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 1px;
+}
+
 .stella-screen-toggle {
   display: inline-flex;
   align-items: center;
@@ -977,13 +1012,13 @@
  * The avatar column is a fixed width so a continuation (no face) keeps its
  * text on the same line as the message above it. */
 .stella-column {
-  gap: 10px;
+  gap: 12px;
 }
 
 .stella-msg {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
 }
 
 /* A message that just ARRIVED, not one that merely rendered (see
@@ -1020,7 +1055,7 @@
 .stella-msg .stella-msg-body {
   min-width: 0;
   font-size: var(--type-14);
-  line-height: 1.65;
+  line-height: 1.75;
   /* A long identifier (a path, a URL) breaks instead of widening the column
    * past the viewport on a phone. */
   overflow-wrap: anywhere;
@@ -1032,8 +1067,8 @@
 .stella-day {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 6px 0 2px;
+  gap: 12px;
+  margin: 8px 0 4px;
   color: var(--text-faint);
   font-size: var(--type-11-5);
   font-weight: 500;
@@ -1082,6 +1117,7 @@
   margin-left: 4px;
   font-size: var(--type-12);
   color: var(--text-faint);
+  animation: lum-fade var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 /* --- stella: in-conversation search --------------------------------------- */
@@ -1110,7 +1146,7 @@
 .stella-search-input {
   flex: 1;
   min-width: 0;
-  padding: 5px 10px;
+  padding: 4px 12px;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   font-size: var(--type-13);
@@ -1132,7 +1168,7 @@
 .stella-search-note {
   max-width: 880px;
   margin: 0 auto;
-  padding: 0 16px 10px;
+  padding: 0 16px 12px;
   font-size: var(--type-12);
   color: var(--text-dim);
 }
@@ -1141,7 +1177,7 @@
   max-width: 880px;
   max-height: 36dvh;
   margin: 0 auto;
-  padding: 0 12px 10px;
+  padding: 0 12px 12px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1153,7 +1189,7 @@
   flex-direction: column;
   gap: 2px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
   text-align: left;
   transition: background-color var(--lum-dur-fast) var(--lum-ease-out);
@@ -1221,9 +1257,9 @@
 .stella-disabled-note {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-  padding: 10px 12px;
+  padding: 12px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-2);
@@ -1250,7 +1286,7 @@
  * cannot carry, so they share one column with a small heading each. */
 .stella-pane-section {
   margin: 0;
-  padding: 9px 12px 4px;
+  padding: 8px 12px 4px;
   font-size: var(--type-11);
   font-weight: 600;
   color: var(--text-dim);
@@ -1288,9 +1324,9 @@
 .stella-settings-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 6px 12px;
+  padding: 8px 12px;
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
@@ -1320,7 +1356,7 @@
 /* The body is mounted only while the item is open, so this padding is not a
  * collapsed row's leftover: it is the gap the list needs from its toggle. */
 .stella-settings-body {
-  padding: 2px 10px 0;
+  padding: 2px 12px 0;
 }
 
 /* --- stella: the agent's MCP servers in the information panel ------------ */
@@ -1331,8 +1367,8 @@
 .stella-mcp {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 2px 2px 6px;
+  gap: 8px;
+  padding: 2px 2px 8px;
 }
 
 .stella-mcp-group {
@@ -1362,8 +1398,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px;
-  padding: 3px 6px;
+  gap: 8px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
@@ -1397,7 +1433,7 @@
 /* The refresh row keeps the toggle's hit area but not its chevron: it is an
  * action, not another fold. */
 .stella-mcp-refresh {
-  padding: 3px 6px;
+  padding: 4px 8px;
   font-size: var(--type-11);
   color: var(--text-dim);
 }
@@ -1415,7 +1451,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+  padding: 8px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-2);
@@ -1426,7 +1462,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 6px 8px;
+  padding: 8px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-2);
@@ -1455,7 +1491,7 @@
 .stella-share-root-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 2px 0 2px 2px;
 }
 
@@ -1499,7 +1535,7 @@
 }
 
 .stella-pane-screen-title {
-  padding-bottom: 6px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1705,6 +1741,13 @@
     backwards;
 }
 
+/* Wide-viewport sidebar collapse: hide the agent column while reading a
+ * conversation so the transcript and screen pane get the full width. */
+.stella-shell[data-screen="conversation"][data-sidebar="collapsed"]
+  .stella-sidebar {
+  display: none;
+}
+
 @media (max-width: 900px) {
   /* The list and the conversation are two screens, not two columns. A tablet
    * held upright is 800-834px wide: side by side, the list leaves the
@@ -1801,8 +1844,8 @@
 .stella-handover {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 12px 12px;
   background: var(--accent-soft);
   border-bottom: 1px solid var(--border);
   /* The agent stopped and asked for help: the bar arrives with the pane it
@@ -1839,7 +1882,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 /* What went wrong (or that a copy landed). It takes the rest of the row and
@@ -1858,7 +1901,7 @@
 
 .stella-handover-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
 }
 
@@ -1869,9 +1912,7 @@
 
 .stella-handover-label {
   margin: 0;
-  font-size: var(--type-10);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--type-11);
   color: var(--text-dim);
 }
 
@@ -1885,10 +1926,10 @@
 .share-request-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   max-width: 420px;
-  padding: 14px 16px;
+  padding: 16px 16px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1998,7 +2039,7 @@
 
   /* Rows are a fingertip tall and carry their two lines comfortably. */
   .stella-agent-name {
-    padding: 10px 8px;
+    padding: 12px 8px;
     font-size: var(--type-14);
   }
 
@@ -2008,7 +2049,7 @@
 
   /* The face is what identifies a row at this size. */
   .stella-column {
-    padding: 0 14px;
+    padding: 0 16px;
     gap: 12px;
   }
 
@@ -2052,7 +2093,7 @@
     top: 0;
     z-index: 1;
     background: var(--surface);
-    padding: max(6px, env(safe-area-inset-top)) 8px 6px 12px;
+    padding: max(8px, env(safe-area-inset-top)) 8px 8px 12px;
   }
 
   .stella-pane-header .icon-btn {
@@ -2118,11 +2159,11 @@
   /* The shell's margin is 0 here and the rows take 10px of their own (below),
    * so the strip's content starts at that 10 to stay on the list's row edge. */
   .stella-titlebar {
-    padding: 0 10px;
+    padding: 0 12px;
   }
 
   .stella-agent-name {
-    padding: 12px 10px;
+    padding: 12px 12px;
     font-size: var(--type-15);
   }
 
@@ -2135,7 +2176,7 @@
   }
 
   .stella-column {
-    gap: 14px;
+    gap: 16px;
   }
 
   .stella-back {

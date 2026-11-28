@@ -59,15 +59,15 @@ test("every manifest icon is a file the build ships", () => {
   assertEquals(PWA_ICON_FILES.includes("apple-touch-icon.png"), true);
 });
 
-test("theme_color is the app's dark canvas", () => {
+test("theme_color is the app's light canvas", () => {
   // The theme is this client's choice and a manifest cannot vary by client,
   // so both colours stay on the canvas the app is designed around. The page
   // corrects its own theme-color meta after the first paint.
   const manifest = parse();
-  assertEquals(manifest.theme_color, THEME_COLORS.dark);
+  assertEquals(manifest.theme_color, THEME_COLORS.light);
   // The splash screen starts at the same colour: anything else flashes a
   // rectangle the app never shows before its first paint.
-  assertEquals(manifest.background_color, THEME_COLORS.dark);
+  assertEquals(manifest.background_color, THEME_COLORS.light);
 });
 
 test("the manifest speaks the app language", () => {

@@ -56,7 +56,7 @@ function hook(overrides: Partial<StellaHook>): StellaHook {
   };
 }
 
-function render(stella: StellaHook): string {
+function render(stella: StellaHook, sidebarCollapsed = false): string {
   initLocale("ja");
   return renderToString(
     <StellaModeScreen
@@ -75,6 +75,7 @@ function render(stella: StellaHook): string {
       onOpenSettings={() => {}}
       screenOpen={false}
       onScreenOpenChange={() => {}}
+      sidebarCollapsed={sidebarCollapsed}
     />,
   );
 }
@@ -100,5 +101,19 @@ test("StellaModeScreen: a picked agent is the conversation", () => {
       }),
     ),
     'data-screen="conversation"',
+  );
+});
+
+test("StellaModeScreen: sidebar collapse sets data-sidebar on the shell", () => {
+  assertStringIncludes(
+    render(
+      hook({
+        activeAgentId: "a1",
+        conversation: emptyStellaState("Aide"),
+        sessionId: "s1",
+      }),
+      true,
+    ),
+    'data-sidebar="collapsed"',
   );
 });

@@ -1,5 +1,7 @@
 import {
   IconArrowLeft,
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
   IconLayoutSidebarRightCollapse,
   IconLayoutSidebarRightExpand,
   IconSearch,
@@ -15,6 +17,11 @@ export interface StellaTitleBarHeaderProps {
   /** Return to the list. Present only at phone widths, where the list and the
    * conversation are two screens instead of two columns. */
   onBack?: () => void;
+  /** Collapse or expand the desktop agent sidebar while a conversation is open.
+   * Omitted on narrow screens where the list is a separate screen. */
+  onToggleSidebar?: () => void;
+  /** Whether the desktop agent sidebar is currently collapsed. */
+  sidebarCollapsed?: boolean;
   /** Open the edit dialog for the open agent (name and picture). */
   onEditAgent: () => void;
   /** Show or hide the machine's screen. Omitted while there is nothing to
@@ -50,13 +57,14 @@ export interface StellaTitleBarHeaderProps {
  * the thing this replaces.
  *
  * The controls are the conversation's, not the window's: back (phone only),
- * the agent's face (which opens the edit dialog), the name, the machine's
- * state while it is worth saying, and the information panel's toggle at the
- * right edge, where the panel appears.
+ * sidebar collapse (desktop only), the agent's face (which opens the edit
+ * dialog), the name, and the information panel's toggle at the right edge.
  */
 export function StellaTitleBarHeader({
   agent,
   onBack,
+  onToggleSidebar,
+  sidebarCollapsed = false,
   onEditAgent,
   onToggleScreen,
   screenOpen,
@@ -82,6 +90,30 @@ export function StellaTitleBarHeader({
           aria-label={t("chat.stella.backToList")}
         >
           <IconArrowLeft size={18} />
+        </button>
+      )}
+      {onToggleSidebar !== undefined && (
+        <button
+          type="button"
+          className={`stella-sidebar-toggle${sidebarCollapsed ? "" : " on"}`}
+          onClick={onToggleSidebar}
+          aria-pressed={!sidebarCollapsed}
+          title={t(
+            sidebarCollapsed
+              ? "chat.stella.sidebar.show"
+              : "chat.stella.sidebar.hide",
+          )}
+          aria-label={t(
+            sidebarCollapsed
+              ? "chat.stella.sidebar.show"
+              : "chat.stella.sidebar.hide",
+          )}
+        >
+          {sidebarCollapsed ? (
+            <IconLayoutSidebarLeftExpand size={16} />
+          ) : (
+            <IconLayoutSidebarLeftCollapse size={16} />
+          )}
         </button>
       )}
       {agent !== null && (
@@ -139,9 +171,9 @@ export function StellaTitleBarHeader({
            * same window with a right sidebar, so the pair still names what
            * the button shows. */}
           {screenOpen ? (
-            <IconLayoutSidebarRightCollapse size={17} />
+            <IconLayoutSidebarRightCollapse size={16} />
           ) : (
-            <IconLayoutSidebarRightExpand size={17} />
+            <IconLayoutSidebarRightExpand size={16} />
           )}
         </button>
       )}

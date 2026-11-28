@@ -34,7 +34,7 @@ export function RecentSessionsModal({
               title={t("common.close")}
               aria-label={t("common.close")}
             >
-              <IconX size={15} />
+              <IconX size={16} />
             </button>
           </div>
           <RecentSessionsList

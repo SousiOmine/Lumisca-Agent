@@ -38,7 +38,9 @@ export function RunningIndicator({
           <span className="stella-typing-dot" aria-hidden="true" />
           <span className="stella-typing-dot" aria-hidden="true" />
           <span className="stella-typing-dot" aria-hidden="true" />
-          <span className="stella-activity-label">{label}</span>
+          <span key={label} className="stella-activity-label">
+            {label}
+          </span>
         </div>
       </div>
     </div>

@@ -190,7 +190,7 @@ export function TitleBar({
               title={t("chrome.titleBar.minimize")}
               aria-label={t("chrome.titleBar.minimize")}
             >
-              <IconMinus size={15} />
+              <IconMinus size={16} />
             </button>
             <button
               type="button"
@@ -207,7 +207,7 @@ export function TitleBar({
                   : t("chrome.titleBar.maximize")
               }
             >
-              {maximized ? <IconCopy size={13} /> : <IconSquare size={12} />}
+              {maximized ? <IconCopy size={14} /> : <IconSquare size={14} />}
             </button>
             <button
               type="button"
@@ -216,7 +216,7 @@ export function TitleBar({
               title={t("common.close")}
               aria-label={t("common.close")}
             >
-              <IconX size={15} />
+              <IconX size={16} />
             </button>
           </>
         )}

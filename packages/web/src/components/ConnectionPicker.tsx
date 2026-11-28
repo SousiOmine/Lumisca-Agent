@@ -59,7 +59,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
         <IconServer size={14} />
         <span className="connection-picker-label">{current}</span>
         <span className={`connection-picker-chevron${open ? " open" : ""}`}>
-          <IconChevronDown size={13} />
+          <IconChevronDown size={14} />
         </span>
       </button>
 

@@ -22,16 +22,17 @@ body,
  * The document is the window here, not a document. */
 html,
 body {
+  background: var(--bg);
   overflow: hidden;
   overscroll-behavior: none;
 }
 
 body {
-  background: var(--bg);
   color: var(--text);
   font-family: var(--ui);
   font-size: var(--type-14);
   line-height: 1.55;
+  font-feature-settings: "palt" 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   /* Mobile browsers otherwise inflate the text (notably in landscape on
@@ -39,6 +40,12 @@ body {
    * page is laid out for the viewport as it is. */
   text-size-adjust: 100%;
   -webkit-text-size-adjust: 100%;
+}
+
+/* Keep every Tabler icon on the same 1.5 stroke weight across the app.
+ * Attribute selector avoids a dead-class finding in styles_test.ts. */
+svg[class*="tabler-icon"] {
+  stroke-width: 1.5;
 }
 
 button {
@@ -65,7 +72,7 @@ select {
   font-size: inherit;
   color: var(--text);
   background: var(--input-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   padding: 8px 12px;
 }
@@ -78,7 +85,7 @@ select {
 input:focus:not(:focus-visible),
 textarea:focus:not(:focus-visible),
 select:focus:not(:focus-visible) {
-  border-color: var(--border-strong);
+  border-color: var(--text-faint);
   outline: none;
 }
 
@@ -111,18 +118,17 @@ select:focus:not(:focus-visible) {
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
-  padding: 7px 14px;
+  padding: 8px 16px;
   background: var(--surface-2);
   color: var(--text);
   font-size: var(--type-13);
   transition:
     background var(--lum-dur-fast) var(--lum-ease-out),
     border-color var(--lum-dur-fast) var(--lum-ease-out),
-    transform var(--lum-dur-fast) var(--lum-ease-out),
-    filter var(--lum-dur-fast) var(--lum-ease-out);
+    transform var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .btn:hover {
@@ -140,7 +146,7 @@ select:focus:not(:focus-visible) {
 }
 
 .btn.primary:hover {
-  filter: brightness(1.08);
+  background: var(--accent-hover);
 }
 
 .btn.danger:hover {
@@ -149,7 +155,7 @@ select:focus:not(:focus-visible) {
 }
 
 .btn.small {
-  padding: 4px 10px;
+  padding: 4px 12px;
   font-size: var(--type-12);
 }
 
@@ -177,7 +183,7 @@ select:focus:not(:focus-visible) {
 }
 
 .icon-btn:active {
-  transform: scale(0.96);
+  transform: scale(0.98);
 }
 
 /* scrollbars */
@@ -252,18 +258,18 @@ select:focus:not(:focus-visible) {
   textarea,
   select {
     font-size: var(--type-16);
-    padding: 10px 14px;
+    padding: 12px 16px;
   }
 
   .btn {
     min-height: 40px;
-    padding: 9px 16px;
+    padding: 8px 16px;
     font-size: var(--type-14);
   }
 
   .btn.small {
     min-height: 36px;
-    padding: 7px 12px;
+    padding: 8px 12px;
     font-size: var(--type-13);
   }
 

@@ -46,6 +46,7 @@ export function DoneStep() {
           </span>
         </SettingRow>
       </div>
+      <p className="setup-first-step">{t("setup.done.firstStep")}</p>
     </>
   );
 }

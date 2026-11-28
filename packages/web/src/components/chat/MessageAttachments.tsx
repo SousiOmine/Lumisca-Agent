@@ -292,7 +292,7 @@ function AttachmentFileCard({
         </span>
         <IconDownload
           className="msg-attachment-file-action"
-          size={15}
+          size={16}
           stroke={1.5}
           aria-hidden="true"
         />

@@ -89,9 +89,9 @@ export function ComposerSuggestions({
           renderRow={(item) => (
             <>
               {item.isDir ? (
-                <IconFolder size={13} className="mention-icon" />
+                <IconFolder size={14} className="mention-icon" />
               ) : (
-                <IconFile size={13} className="mention-icon" />
+                <IconFile size={14} className="mention-icon" />
               )}
               <span className="mention-item-name">{item.name}</span>
               <span className="mention-item-path">{item.path}</span>
@@ -126,7 +126,7 @@ export function ComposerSuggestions({
                     setSlash({ ...slash, submenu: null, active: 0 })
                   }
                 >
-                  <IconArrowLeft size={13} />
+                  <IconArrowLeft size={14} />
                   <span>{slash.submenu.label}</span>
                 </button>
               </div>
@@ -147,7 +147,7 @@ export function ComposerSuggestions({
               {slash.submenu === null &&
                 isSlashCommand(item) &&
                 (item.items?.length ?? 0) > 0 && (
-                  <IconChevronRight size={13} className="slash-chevron" />
+                  <IconChevronRight size={14} className="slash-chevron" />
                 )}
             </>
           )}

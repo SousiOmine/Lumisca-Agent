@@ -41,7 +41,7 @@
   overflow-y: auto;
   scrollbar-gutter: stable both-edges;
   min-height: 0;
-  padding: 20px 0 10px;
+  padding: 20px 0 12px;
 }
 
 /* Floating jump-to-latest control, anchored above the composer only while the
@@ -154,7 +154,7 @@
   padding: 0 24px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 /* ---- messages: the shared bubble language --------------------------------
@@ -188,7 +188,7 @@
   max-width: 85%;
   background: var(--user-msg-bg);
   border-radius: var(--radius-xl);
-  padding: 11px 16px;
+  padding: 12px 16px;
 }
 
 /* A user message that just arrived, in either mode. The flag is on the row
@@ -208,7 +208,7 @@
   align-items: center;
   gap: 4px;
   min-height: 20px;
-  padding-right: 6px;
+  padding-right: 8px;
 }
 
 /* The other speaker's time starts where its words start. A message box is
@@ -239,7 +239,7 @@
 .msg-action-btn {
   display: flex;
   align-items: center;
-  padding: 4px 6px;
+  padding: 4px 8px;
   border: none;
   border-radius: var(--radius-pill);
   background: transparent;
@@ -286,10 +286,11 @@
 .msg-body {
   min-width: 0;
   font-size: var(--type-14);
+  line-height: 1.75;
 }
 
 .msg-body p {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
 }
 
 .msg-body p:last-child {
@@ -310,7 +311,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .msg-images:last-child {
@@ -429,7 +430,7 @@
  * farther than the lines inside one. An attachment-only prompt has no
  * capsule, so there is nothing to separate. */
 .msg.user + .msg-attachments {
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 /* A reply's attachments sit at the left, where the reply starts, with the
@@ -438,7 +439,7 @@
   align-items: flex-start;
   width: 420px;
   max-width: 100%;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 /* The time sits under the whole group. A card's edge is heavier than a
@@ -560,17 +561,17 @@
 .msg-attachment-files {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .msg-attachment-file {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   min-width: 0;
   min-height: 56px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -657,18 +658,17 @@ a.msg-attachment-file.checking {
  * line. */
 .markdown img.visual-svg {
   display: block;
-  margin: 10px 0;
+  margin: 12px 0;
 }
 
 /* The card a diagram that cannot be shown renders: the reason, and the
  * source it came from (collapsed, so nothing the agent wrote is lost). */
 .visual-error {
-  margin: 10px 0;
-  padding: 10px 12px;
+  margin: 12px 0;
+  padding: 12px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--error);
   border-radius: var(--radius);
-  background: var(--surface-2);
+  background: var(--error-soft);
 }
 
 .visual-error-title {
@@ -695,7 +695,7 @@ a.msg-attachment-file.checking {
 
 .visual-error-source pre {
   max-height: 40dvh;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 .msg-body pre {
@@ -704,7 +704,7 @@ a.msg-attachment-file.checking {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 10px 12px;
+  padding: 12px 12px;
   overflow-x: auto;
   margin: 8px 0;
 }
@@ -765,7 +765,7 @@ a.msg-attachment-file.checking {
   font-size: var(--type-12-5);
   background: var(--surface-3);
   border-radius: var(--radius-xs);
-  padding: 1px 5px;
+  padding: 1px 4px;
 }
 
 .msg-body pre code {
@@ -776,19 +776,19 @@ a.msg-attachment-file.checking {
 /* markdown-rendered assistant messages */
 .markdown ul,
 .markdown ol {
-  margin: 0 0 10px;
-  padding-left: 22px;
+  margin: 0 0 12px;
+  padding-left: 24px;
 }
 
 .markdown li {
-  margin: 3px 0;
+  margin: 4px 0;
 }
 
 .markdown h1,
 .markdown h2,
 .markdown h3,
 .markdown h4 {
-  margin: 14px 0 8px;
+  margin: 16px 0 8px;
   font-weight: 600;
   line-height: 1.35;
 }
@@ -847,7 +847,7 @@ a.msg-attachment-file.checking {
 .markdown th,
 .markdown td {
   border: 1px solid var(--border);
-  padding: 5px 10px;
+  padding: 4px 12px;
   text-align: left;
 }
 
@@ -859,7 +859,7 @@ a.msg-attachment-file.checking {
 .markdown hr {
   border: none;
   border-top: 1px solid var(--border);
-  margin: 14px 0;
+  margin: 16px 0;
 }
 
 .cursor {
@@ -879,7 +879,7 @@ a.msg-attachment-file.checking {
 .conversation-turn {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 /* A turn that arrived while the reader was at the bottom of the transcript.
@@ -893,7 +893,7 @@ a.msg-attachment-file.checking {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 0 0 8px;
   border: 0;
   border-bottom: 1px solid var(--border);
@@ -934,10 +934,31 @@ a.msg-attachment-file.checking {
   transform: rotate(90deg);
 }
 
+/* Subtle left-to-right sheen while the agent thinks before its first token.
+ * Masking keeps the text single-colored in both themes. */
+.agent-activity-thinking {
+  color: var(--text-dim);
+  mask-image: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.45) 0%,
+    #000 50%,
+    rgba(0, 0, 0, 0.45) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.45) 0%,
+    #000 50%,
+    rgba(0, 0, 0, 0.45) 100%
+  );
+  mask-size: 200% 100%;
+  -webkit-mask-size: 200% 100%;
+  animation: lum-shimmer 1.8s linear infinite;
+}
+
 .agent-work-log {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 /* ---- tool calls (timeline) ---------------------------------------------- */
@@ -949,10 +970,10 @@ a.msg-attachment-file.checking {
 .tool-line {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
+  gap: 8px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
-  font-family: var(--mono);
+  font-family: var(--ui);
   font-size: var(--type-12);
   color: var(--text-dim);
   cursor: pointer;
@@ -994,6 +1015,7 @@ a.msg-attachment-file.checking {
 }
 
 .tool-line-summary {
+  font-family: var(--mono);
   color: var(--text-dim);
   min-width: 0;
   overflow: hidden;
@@ -1007,8 +1029,10 @@ a.msg-attachment-file.checking {
   align-items: center;
   gap: 4px;
   flex: none;
+  font-family: var(--mono);
   font-size: var(--type-11);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .tool-diff-added {
@@ -1020,20 +1044,19 @@ a.msg-attachment-file.checking {
 }
 
 .tool-line-check {
-  color: var(--ok);
+  color: var(--text-faint);
   flex: none;
 }
 
 .tool-line-error {
   color: var(--error);
-  font-size: var(--type-10);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: var(--type-11);
+  font-weight: 600;
   flex: none;
 }
 
 .tool-detail {
-  padding: 6px 8px 6px 26px;
+  padding: 8px 8px 8px 24px;
   font-family: var(--mono);
   font-size: var(--type-12);
   border-top: 1px solid var(--border);
@@ -1042,7 +1065,7 @@ a.msg-attachment-file.checking {
 .tool-detail-args {
   color: var(--text-dim);
   white-space: pre-wrap;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .tool-detail-result {
@@ -1081,7 +1104,6 @@ a.msg-attachment-file.checking {
   font-size: var(--type-10-5);
   font-weight: 500;
   line-height: 1.6;
-  letter-spacing: 0.03em;
 }
 
 /* ---- system notifications (compact rows) --------------------------------- */
@@ -1093,8 +1115,8 @@ a.msg-attachment-file.checking {
 .notification-line {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
+  gap: 8px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
   font-family: var(--mono);
   font-size: var(--type-12);
@@ -1140,20 +1162,19 @@ a.msg-attachment-file.checking {
 }
 
 .notification-line-check {
-  color: var(--ok);
+  color: var(--text-faint);
   flex: none;
 }
 
 .notification-line-error {
   color: var(--error);
-  font-size: var(--type-10);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: var(--type-11);
+  font-weight: 600;
   flex: none;
 }
 
 .notification-detail {
-  padding: 6px 8px 6px 26px;
+  padding: 8px 8px 8px 24px;
   font-family: var(--mono);
   font-size: var(--type-12);
   border-top: 1px solid var(--border);
@@ -1185,7 +1206,7 @@ a.msg-attachment-file.checking {
  * desktop would eat a tablet's width. */
 @media (max-width: 900px) {
   .chat-column {
-    gap: 14px;
+    gap: 16px;
     padding: 0 16px;
   }
 
@@ -1249,11 +1270,11 @@ a.msg-attachment-file.checking {
 @media (hover: none), (pointer: coarse) {
   .msg-action-btn {
     opacity: 1;
-    padding: 8px 10px;
+    padding: 8px 12px;
   }
 
   .md-code-copy {
-    padding: 6px 10px;
+    padding: 8px 12px;
   }
 }
 
@@ -1271,7 +1292,7 @@ a.msg-attachment-file.checking {
   }
 
   .msg.user {
-    padding: 13px 18px;
+    padding: 12px 16px;
   }
 
   .chat-column {
@@ -1279,7 +1300,7 @@ a.msg-attachment-file.checking {
   }
 
   .msg-action-btn {
-    padding: 9px 12px;
+    padding: 8px 12px;
     font-size: var(--type-12);
   }
 }

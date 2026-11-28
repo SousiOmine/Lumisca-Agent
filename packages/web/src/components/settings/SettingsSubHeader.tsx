@@ -33,7 +33,7 @@ export function SettingsSubHeader({
         title={t("common.back")}
         aria-label={t("common.back")}
       >
-        <IconArrowLeft size={15} />
+        <IconArrowLeft size={16} />
         {t("common.back")}
       </button>
       <span className="settings-subhead-title">{title}</span>

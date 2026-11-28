@@ -29,6 +29,10 @@ export const panels = {
   },
 
   // --- agent activity (turn timer) -----------------------------------------
+  "panels.activity.thinking": {
+    ja: "考え中…",
+    en: "Thinking…",
+  },
   "panels.activity.working": {
     ja: "作業中（経過時間: {time}）",
     en: "Working (elapsed: {time})",
@@ -167,8 +171,8 @@ export const panels = {
 
   "panels.question.header": { ja: "質問", en: "Question" },
   "panels.question.placeholder": {
-    ja: "選択肢にない回答はこちらに入力してください",
-    en: "Type your answer here",
+    ja: "自由回答を入力",
+    en: "Enter another answer",
   },
   "panels.question.ariaLabel": {
     ja: "「{question}」への回答",
@@ -198,6 +202,96 @@ export const panels = {
   // The one-line summary a tool call shows in the transcript. The wording is
   // the app's, not the model's: a row the user reads should follow the app
   // language like every other label.
+  "panels.tool.name.read": { ja: "ファイル読み込み", en: "Read file" },
+  "panels.tool.name.write": { ja: "ファイル作成", en: "Write file" },
+  "panels.tool.name.edit": { ja: "ファイル編集", en: "Edit file" },
+  "panels.tool.name.listDir": { ja: "フォルダー一覧", en: "List folder" },
+  "panels.tool.name.chatAttach": { ja: "ファイル添付", en: "Attach files" },
+  "panels.tool.name.visual": { ja: "画像表示", en: "Show image" },
+  "panels.tool.name.pdfReadPages": { ja: "PDF読み込み", en: "Read PDF" },
+  "panels.tool.name.bash": { ja: "コマンド実行", en: "Run command" },
+  "panels.tool.name.asyncBash": {
+    ja: "バックグラウンド実行",
+    en: "Run in background",
+  },
+  "panels.tool.name.asyncBashStatus": {
+    ja: "実行状況を確認",
+    en: "Check background process",
+  },
+  "panels.tool.name.asyncBashKill": {
+    ja: "プロセス停止",
+    en: "Stop process",
+  },
+  "panels.tool.name.eval": { ja: "コード実行", en: "Run code" },
+  "panels.tool.name.execute": { ja: "コード実行", en: "Run code" },
+  "panels.tool.name.webSearch": { ja: "Web検索", en: "Web search" },
+  "panels.tool.name.webFetch": { ja: "Webページ取得", en: "Fetch web page" },
+  "panels.tool.name.browserOpen": { ja: "ブラウザで開く", en: "Open page" },
+  "panels.tool.name.browserObserve": {
+    ja: "ページ内容を確認",
+    en: "Inspect page",
+  },
+  "panels.tool.name.browserAct": { ja: "ブラウザ操作", en: "Browser action" },
+  "panels.tool.name.browserWait": { ja: "ページ待機", en: "Wait for page" },
+  "panels.tool.name.browserScreenshot": {
+    ja: "ブラウザ画面を取得",
+    en: "Capture browser",
+  },
+  "panels.tool.name.browserClose": {
+    ja: "ブラウザを閉じる",
+    en: "Close browser",
+  },
+  "panels.tool.name.computerScreenshot": {
+    ja: "画面を取得",
+    en: "Capture screen",
+  },
+  "panels.tool.name.computerAct": { ja: "画面操作", en: "Screen action" },
+  "panels.tool.name.computerListWindows": {
+    ja: "ウィンドウ一覧",
+    en: "List windows",
+  },
+  "panels.tool.name.vmAskUser": {
+    ja: "ユーザーに確認",
+    en: "Request user action",
+  },
+  "panels.tool.name.ask": { ja: "質問", en: "Ask question" },
+  "panels.tool.name.todo": { ja: "進捗を更新", en: "Update plan" },
+  "panels.tool.name.sendChat": { ja: "メッセージを送信", en: "Send message" },
+  "panels.tool.name.skill": { ja: "スキルを読み込み", en: "Load skill" },
+  "panels.tool.name.historySearch": {
+    ja: "履歴を検索",
+    en: "Search history",
+  },
+  "panels.tool.name.identity": { ja: "メモを更新", en: "Update memory" },
+  "panels.tool.name.task": { ja: "サブタスク実行", en: "Run task" },
+  "panels.tool.name.taskOutput": {
+    ja: "サブタスク結果を取得",
+    en: "Read task output",
+  },
+  "panels.tool.name.sendMessage": {
+    ja: "エージェントへ送信",
+    en: "Message agent",
+  },
+  "panels.tool.name.agentCreate": {
+    ja: "エージェント作成",
+    en: "Create agent",
+  },
+  "panels.tool.name.routineCreate": {
+    ja: "ルーチン作成",
+    en: "Create routine",
+  },
+  "panels.tool.name.routineList": { ja: "ルーチン一覧", en: "List routines" },
+  "panels.tool.name.routineUpdate": {
+    ja: "ルーチン更新",
+    en: "Update routine",
+  },
+  "panels.tool.name.routineDelete": {
+    ja: "ルーチン削除",
+    en: "Delete routine",
+  },
+  "panels.tool.name.routineRun": { ja: "ルーチン実行", en: "Run routine" },
+  "panels.tool.name.search": { ja: "ツール検索", en: "Search tools" },
+  "panels.tool.name.call": { ja: "外部ツール実行", en: "Call tool" },
   "panels.tool.askQuestions": {
     ja: "{count}件の質問",
     en: "{count} questions",

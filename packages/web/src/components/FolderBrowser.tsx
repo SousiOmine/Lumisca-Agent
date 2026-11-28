@@ -101,7 +101,7 @@ function EntryRow({
         aria-disabled="true"
       >
         <span className="folder-icon">
-          <IconFile size={15} />
+          <IconFile size={16} />
         </span>
         {/* The hint rides on the name, not the row: a title on the row would
          * replace the file name as its accessible name. */}
@@ -123,7 +123,7 @@ function EntryRow({
       onDblClick={() => onOpen(entry.path)}
     >
       <span className="folder-icon">
-        <IconFolder size={15} />
+        <IconFolder size={16} />
       </span>
       <span className="folder-browser-name">{entry.name}</span>
     </div>
@@ -295,7 +295,7 @@ export function FolderBrowser({
                 <Fragment key={crumb.path}>
                   {index > 0 && (
                     <span className="folder-browser-sep">
-                      <IconChevronRight size={12} />
+                      <IconChevronRight size={14} />
                     </span>
                   )}
                   <button

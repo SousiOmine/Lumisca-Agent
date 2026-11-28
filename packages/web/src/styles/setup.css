@@ -28,8 +28,8 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 22px 24px 18px;
+  gap: 16px;
+  padding: 24px 24px 20px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -110,7 +110,7 @@
  * card and still under it when the body scrolls. */
 .setup-alt {
   margin-top: auto;
-  padding-top: 14px;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: flex-end;
@@ -127,8 +127,7 @@
 }
 
 .setup-local:hover {
-  background: var(--accent);
-  filter: brightness(1.08);
+  background: var(--accent-hover);
 }
 
 /* The two moves stay reachable because they are outside the scroller: a
@@ -137,7 +136,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 8px 0 2px;
+  padding: 8px 0 4px;
 }
 
 /* Back sits at the left edge, away from the forward move: the two are not a
@@ -162,6 +161,13 @@
   color: var(--text-dim);
 }
 
+.setup-first-step {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: var(--type-13);
+  line-height: 1.7;
+}
+
 /* A phone has no room for a floating card: the screen is the card. */
 @media (max-width: 600px) {
   .setup {
@@ -170,7 +176,7 @@
 
   .setup-inner {
     height: 100%;
-    padding: 18px 16px 16px;
+    padding: 16px;
     border: none;
     border-radius: 0;
     box-shadow: none;

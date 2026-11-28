@@ -17,7 +17,7 @@
 .stack-6 {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .stack-8 {
@@ -32,8 +32,8 @@
 .setting-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 0;
+  gap: 12px;
+  padding: 8px 0;
 }
 
 /* A card whose body stacks (a summary row, then the fields it opens). The
@@ -149,7 +149,7 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   overflow-y: auto;
   max-height: 320px;
 }
@@ -160,7 +160,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 0;
+  padding: 8px 0;
 }
 
 .approval-body {
@@ -194,7 +194,7 @@
 .settings-pane {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 /* Compaction tuning (settings → モデル): its two numeric fields are also
@@ -213,7 +213,7 @@
   margin-bottom: 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .personalize-textarea {
@@ -227,7 +227,7 @@
 .settings-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 /* A form's own buttons, at its trailing edge (Save / Cancel). */
@@ -242,10 +242,10 @@
 
 /* saved prompts: one entry of the list, separated by spacing */
 .saved-prompt-card {
-  padding: 9px 0;
+  padding: 8px 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .saved-prompt-header {
@@ -287,7 +287,7 @@
   overflow-y: auto;
   background: var(--surface-3);
   border-radius: var(--radius);
-  padding: 8px 10px;
+  padding: 8px 12px;
 }
 
 /* saved prompt edit/add form */
@@ -295,7 +295,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-2);
-  padding: 10px;
+  padding: 12px;
   margin-bottom: 8px;
   display: flex;
   flex-direction: column;
@@ -314,7 +314,7 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   font-size: var(--type-12-5);
   color: var(--text-dim);
 }
@@ -334,7 +334,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
+  padding: 12px 0;
 }
 
 .model-pref-info {
@@ -362,10 +362,10 @@
 .model-pref-picker {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   height: var(--model-pref-control-height);
-  padding: 0 8px 0 10px;
+  padding: 0 8px 0 12px;
   font-size: var(--type-12-5);
   color: var(--text);
   background: var(--input-bg);
@@ -404,8 +404,7 @@
 }
 
 .model-pref-unset {
-  font-style: italic;
-  color: var(--text-dim);
+  color: var(--text-faint);
 }
 
 /* The row's thinking-strength control (components/ThinkingLevelSelect.tsx):
@@ -443,7 +442,7 @@
 
 .settings-body {
   display: flex;
-  gap: 18px;
+  gap: 16px;
   flex: 1;
   min-height: 0;
 }
@@ -456,7 +455,7 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   overflow-y: auto;
   padding-right: 12px;
   border-right: 1px solid var(--border);
@@ -469,8 +468,8 @@
 }
 
 .settings-nav-heading {
-  margin: 0 0 6px;
-  padding: 0 10px;
+  margin: 0 0 8px;
+  padding: 0 12px;
   font-size: var(--type-11-5);
   font-weight: 600;
   color: var(--text-faint);
@@ -480,7 +479,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   text-align: left;
   font-size: var(--type-13);
   color: var(--text-dim);
@@ -539,8 +538,8 @@
   flex: none;
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 0 0 10px;
+  gap: 12px;
+  padding: 0 0 12px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 16px;
 }
@@ -654,7 +653,7 @@
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 /* Sections are blocks, not a stack of cards: one rule and room above it. */
@@ -673,7 +672,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 12px;
   min-height: 28px;
 }
 
@@ -706,7 +705,7 @@
 .settings-disclosure-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   padding: 8px 0;
   border: 0;
@@ -736,7 +735,7 @@
  * (`.settings-section + .settings-section`); the gap under the toggle is on
  * this wrapper because the body itself has no height while closed. */
 .settings-disclosure-body {
-  padding-top: 14px;
+  padding-top: 16px;
 }
 
 /* One provider: its name, its state, and the way into its detail. The body
@@ -753,8 +752,8 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 0;
+  gap: 12px;
+  padding: 8px 0;
   text-align: left;
   border-radius: var(--radius-xs);
 }
@@ -781,7 +780,7 @@ button.provider-row-body:hover .provider-row-chevron {
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: var(--type-11-5);
   color: var(--text-dim);
 }
@@ -813,7 +812,7 @@ button.provider-row-body:hover .provider-row-chevron {
 .provider-row-actions {
   flex: none;
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
 }
 
@@ -864,8 +863,8 @@ button.provider-row-body:hover .provider-row-chevron {
 }
 
 .model-group + .model-group {
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--border);
 }
 
@@ -914,7 +913,7 @@ button.provider-row-body:hover .provider-row-chevron {
 .model-toggle-item {
   display: flex;
   align-items: center;
-  padding: 8px 0 8px 22px;
+  padding: 8px 0 8px 24px;
   font-size: var(--type-13);
 }
 
@@ -995,7 +994,7 @@ button.provider-row-body:hover .provider-row-chevron {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 0;
+  padding: 8px 0;
 }
 
 .update-info {
@@ -1033,7 +1032,7 @@ button.provider-row-body:hover .provider-row-chevron {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1119,7 +1118,7 @@ button.provider-row-body:hover .provider-row-chevron {
   }
 
   .settings-nav-item {
-    padding: 10px 12px;
+    padding: 12px 12px;
   }
 
   .settings-body[data-view="list"] .settings-content {
@@ -1191,7 +1190,7 @@ button.provider-row-body:hover .provider-row-chevron {
   }
 
   .settings-nav-item {
-    padding: 10px;
+    padding: 12px;
   }
 
   /* The two ways out of a full-screen settings screen: the dialog's close
@@ -1232,7 +1231,7 @@ button.provider-row-body:hover .provider-row-chevron {
   gap: 8px;
   width: 100%;
   min-width: 0;
-  padding: 7px 10px 7px 12px;
+  padding: 8px 12px 8px 12px;
   font-size: var(--type-12-5);
   color: var(--text);
   background: var(--input-bg);
@@ -1316,9 +1315,9 @@ button.provider-row-body:hover .provider-row-chevron {
 .select-option {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 7px 8px;
+  padding: 8px 8px;
   border-radius: var(--radius-sm);
   color: var(--text);
   font-size: var(--type-12-5);
@@ -1371,11 +1370,11 @@ button.provider-row-body:hover .provider-row-chevron {
 
 @media (hover: none), (pointer: coarse) {
   .select-option {
-    padding: 10px 8px;
+    padding: 12px 8px;
   }
 
   .select-trigger {
-    padding: 9px 12px;
+    padding: 8px 12px;
   }
 }
 
@@ -1387,7 +1386,7 @@ button.provider-row-body:hover .provider-row-chevron {
  * whole category within reach of a scroll or two. */
 @media (max-width: 600px) {
   .update-item {
-    padding: 14px 2px;
+    padding: 16px 2px;
   }
 
   .update-label {
@@ -1399,11 +1398,11 @@ button.provider-row-body:hover .provider-row-chevron {
   }
 
   .setting-card {
-    padding: 10px 0;
+    padding: 12px 0;
   }
 
   .settings-nav-item {
-    padding: 10px;
+    padding: 12px;
     font-size: var(--type-13);
   }
 
@@ -1413,18 +1412,18 @@ button.provider-row-body:hover .provider-row-chevron {
   }
 
   .select-trigger {
-    padding: 10px 12px;
+    padding: 12px 12px;
   }
 
   .select-option {
-    padding: 10px 10px;
+    padding: 12px 12px;
   }
 }
 
 /* ---- owners and the server heading -------------------------------------- */
 
 .settings-nav-group + .settings-nav-group {
-  margin-top: 10px;
+  margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
@@ -1434,7 +1433,7 @@ button.provider-row-body:hover .provider-row-chevron {
 .settings-server-head {
   display: flex;
   align-items: flex-start;
-  padding: 2px 10px 8px;
+  padding: 2px 12px 8px;
 }
 
 .settings-server-headtext {

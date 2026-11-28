@@ -8,9 +8,9 @@ import type { ThemeSetting } from "./types.ts";
  * origin. */
 export const THEME_STORAGE_KEY = "lumisca.theme";
 
-/** The theme a client that has never chosen starts in. Dark is the app's
- * canvas; light is a choice, not the default. */
-export const DEFAULT_THEME: ThemeSetting = "dark";
+/** The theme a client that has never chosen starts in. Light is the default
+ * canvas; dark and system are explicit choices. */
+export const DEFAULT_THEME: ThemeSetting = "light";
 
 /** Whether a stored string is one of the theme values this version knows.
  * A value from an older version or a hand-edited profile reads as no
@@ -54,7 +54,7 @@ export function storeTheme(setting: ThemeSetting): void {
  * "system" follows the OS color scheme via prefers-color-scheme. */
 export function resolveTheme(setting: ThemeSetting): "light" | "dark" {
   if (setting !== "system") return setting;
-  if (typeof matchMedia !== "function") return "dark";
+  if (typeof matchMedia !== "function") return "light";
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 

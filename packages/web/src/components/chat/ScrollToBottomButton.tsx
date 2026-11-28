@@ -14,7 +14,7 @@ export function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
       aria-label={label}
       title={label}
     >
-      <IconArrowDown size={16} stroke={1.75} />
+      <IconArrowDown size={16} stroke={1.5} />
     </button>
   );
 }

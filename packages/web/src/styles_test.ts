@@ -79,15 +79,15 @@ test("both theme blocks declare the same tokens", async () => {
     [],
     "declared by the dark theme but not by the light one",
   );
-  // Dark is the default theme: it applies before the client sets data-theme.
+  // Light is the default theme: it applies before the client sets data-theme.
   assertEquals(
     blocks(css).some(
       (block) =>
         block.selector.includes(":root") &&
-        block.selector.includes('data-theme="dark"'),
+        block.selector.includes('data-theme="light"'),
     ),
     true,
-    "the dark theme block must also match :root",
+    "the light theme block must also match :root",
   );
 });
 
@@ -1878,4 +1878,59 @@ test("a scrolling settings page keeps a field's focus ring whole", async () => {
       `${selector}'s negative margin must keep its content in place`,
     );
   }
+});
+
+test("ui-app inputs keep keyboard focus rings and 16px touch sizing", async () => {
+  const css = await fsp.readFile(
+    new URL("./styles/ui-app.css", import.meta.url),
+    "utf8",
+  );
+  const rules = cssRules(css);
+  const focusVisible = rules.find(
+    (rule) =>
+      rule.selector === ".app-input:focus-visible" &&
+      /outline:\s*none/.test(rule.body),
+  );
+  assertEquals(
+    focusVisible,
+    undefined,
+    ".app-input must not strip the keyboard :focus-visible outline",
+  );
+  const touchInput = rules.find(
+    (rule) =>
+      rule.media?.includes("hover: none") === true &&
+      rule.selector === ".app-input" &&
+      /font-size:\s*var\(--type-16\)/.test(rule.body),
+  );
+  assert(
+    touchInput !== undefined,
+    ".app-input must grow to 16px on touch devices so iOS Safari does not zoom",
+  );
+});
+
+test("html and body share the canvas background", async () => {
+  const base = await fsp.readFile(
+    new URL("./styles/base.css", import.meta.url),
+    "utf8",
+  );
+  const rule = /html,\s*body\s*\{([^}]*)\}/.exec(base);
+  assert(rule !== null, "styles/base.css must style html and body together");
+  assertEquals(
+    /background:\s*var\(--bg\)/.test(rule![1]!),
+    true,
+    "html and body must share --bg so iOS overscroll matches the canvas",
+  );
+});
+
+test("agent avatars use perceptually uniform oklch lightness", async () => {
+  const stella = await fsp.readFile(
+    new URL("./styles/stella.css", import.meta.url),
+    "utf8",
+  );
+  const initial = declarations(cssRules(stella), ".agent-avatar-initial");
+  assertEquals(
+    initial.get("background")?.startsWith("oklch("),
+    true,
+    "agent avatars must use oklch() so white initials stay >= 4.5:1 across hues",
+  );
 });

@@ -303,10 +303,10 @@ export function McpDetail({
             {result.tools.length > 0 && (
               <div
                 style={{
-                  marginTop: 6,
+                  marginTop: 8,
                   border: "1px solid var(--border)",
                   borderRadius: "var(--radius)",
-                  padding: "6px 8px",
+                  padding: "8px",
                   maxHeight: 240,
                   overflowY: "auto",
                 }}

@@ -82,7 +82,7 @@ export function StellaSearchBar({
     <div className="stella-search-panel">
       <div className="stella-search-bar">
         <IconSearch
-          size={15}
+          size={16}
           className="stella-search-icon"
           aria-hidden="true"
         />
@@ -115,7 +115,7 @@ export function StellaSearchBar({
           title={t("common.close")}
           aria-label={t("common.close")}
         >
-          <IconX size={15} />
+          <IconX size={16} />
         </button>
       </div>
       {failed && (

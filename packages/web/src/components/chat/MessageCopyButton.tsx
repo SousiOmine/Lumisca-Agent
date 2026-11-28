@@ -34,7 +34,7 @@ export function MessageCopyButton({
         onClick={() => void copy()}
       >
         {copied ? (
-          <IconCheck size={16} stroke={2} />
+          <IconCheck size={16} stroke={1.5} />
         ) : (
           <IconClipboard size={16} stroke={1.5} />
         )}

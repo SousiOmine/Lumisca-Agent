@@ -1,6 +1,7 @@
 import {
   contentImages,
   contentText,
+  type MessageKey,
   TOOL_AGENT_CREATE,
   TOOL_ASK,
   TOOL_ASYNC_BASH,
@@ -47,6 +48,7 @@ import {
   TOOL_WRITE,
 } from "@lumisca/core/shared";
 import {
+  IconBook,
   IconCamera,
   IconCheck,
   IconChevronRight,
@@ -69,7 +71,6 @@ import {
   IconRepeat,
   IconSearch,
   IconSend,
-  IconSparkles,
   IconSubtask,
   IconTerminal2,
   IconUser,
@@ -89,6 +90,7 @@ type IconComponent = ComponentType<{ size?: number }>;
 
 interface ToolPresentation {
   icon: IconComponent;
+  label: MessageKey;
   summary?: (args: Args, t: Translate) => string;
 }
 
@@ -149,12 +151,29 @@ function pdfSummary(args: Args): string {
 }
 
 const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
-  [TOOL_READ]: { icon: IconFile, summary: pathTail },
-  [TOOL_WRITE]: { icon: IconEdit, summary: pathTail },
-  [TOOL_EDIT]: { icon: IconEdit, summary: pathTail },
-  [TOOL_LIST_DIR]: { icon: IconFolder, summary: pathTail },
+  [TOOL_READ]: {
+    icon: IconFile,
+    label: "panels.tool.name.read",
+    summary: pathTail,
+  },
+  [TOOL_WRITE]: {
+    icon: IconEdit,
+    label: "panels.tool.name.write",
+    summary: pathTail,
+  },
+  [TOOL_EDIT]: {
+    icon: IconEdit,
+    label: "panels.tool.name.edit",
+    summary: pathTail,
+  },
+  [TOOL_LIST_DIR]: {
+    icon: IconFolder,
+    label: "panels.tool.name.listDir",
+    summary: pathTail,
+  },
   [TOOL_CHAT_ATTACH]: {
     icon: IconPaperclip,
+    label: "panels.tool.name.chatAttach",
     summary: (args) => {
       const paths = Array.isArray(args.paths) ? args.paths : [];
       if (paths.length === 0) return "";
@@ -163,59 +182,151 @@ const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
       return paths.length === 1 ? name : `${name} +${paths.length - 1}`;
     },
   },
-  [TOOL_VISUAL]: { icon: IconPhoto, summary: pathTail },
-  [TOOL_PDF_READ_PAGES]: { icon: IconFileText, summary: pdfSummary },
-  [TOOL_BASH]: { icon: IconTerminal2, summary: command },
-  [TOOL_ASYNC_BASH]: { icon: IconTerminal2, summary: command },
+  [TOOL_VISUAL]: {
+    icon: IconPhoto,
+    label: "panels.tool.name.visual",
+    summary: pathTail,
+  },
+  [TOOL_PDF_READ_PAGES]: {
+    icon: IconFileText,
+    label: "panels.tool.name.pdfReadPages",
+    summary: pdfSummary,
+  },
+  [TOOL_BASH]: {
+    icon: IconTerminal2,
+    label: "panels.tool.name.bash",
+    summary: command,
+  },
+  [TOOL_ASYNC_BASH]: {
+    icon: IconTerminal2,
+    label: "panels.tool.name.asyncBash",
+    summary: command,
+  },
   [TOOL_ASYNC_BASH_STATUS]: {
     icon: IconTerminal2,
+    label: "panels.tool.name.asyncBashStatus",
     summary: (args, t) =>
       id(args) === "" ? t("panels.tool.backgroundList") : `#${id(args)}`,
   },
-  [TOOL_ASYNC_BASH_KILL]: { icon: IconTerminal2, summary: (a) => `#${id(a)}` },
-  [TOOL_EVAL]: { icon: IconCode, summary: (a) => truncate(arg(a, "code"), 60) },
-  [TOOL_EXECUTE]: {
+  [TOOL_ASYNC_BASH_KILL]: {
+    icon: IconTerminal2,
+    label: "panels.tool.name.asyncBashKill",
+    summary: (a) => `#${id(a)}`,
+  },
+  [TOOL_EVAL]: {
     icon: IconCode,
+    label: "panels.tool.name.eval",
     summary: (a) => truncate(arg(a, "code"), 60),
   },
-  [TOOL_WEB_SEARCH]: { icon: IconWorldSearch, summary: query },
-  [TOOL_WEB_FETCH]: { icon: IconWorldSearch, summary: url },
-  [TOOL_BROWSER_OPEN]: { icon: IconWorld, summary: url },
-  [TOOL_BROWSER_OBSERVE]: { icon: IconWorld },
-  [TOOL_BROWSER_ACT]: { icon: IconMouse, summary: act },
-  [TOOL_BROWSER_WAIT]: { icon: IconWorld, summary: (a) => arg(a, "until") },
+  [TOOL_EXECUTE]: {
+    icon: IconCode,
+    label: "panels.tool.name.execute",
+    summary: (a) => truncate(arg(a, "code"), 60),
+  },
+  [TOOL_WEB_SEARCH]: {
+    icon: IconWorldSearch,
+    label: "panels.tool.name.webSearch",
+    summary: query,
+  },
+  [TOOL_WEB_FETCH]: {
+    icon: IconWorldSearch,
+    label: "panels.tool.name.webFetch",
+    summary: url,
+  },
+  [TOOL_BROWSER_OPEN]: {
+    icon: IconWorld,
+    label: "panels.tool.name.browserOpen",
+    summary: url,
+  },
+  [TOOL_BROWSER_OBSERVE]: {
+    icon: IconWorld,
+    label: "panels.tool.name.browserObserve",
+  },
+  [TOOL_BROWSER_ACT]: {
+    icon: IconMouse,
+    label: "panels.tool.name.browserAct",
+    summary: act,
+  },
+  [TOOL_BROWSER_WAIT]: {
+    icon: IconWorld,
+    label: "panels.tool.name.browserWait",
+    summary: (a) => arg(a, "until"),
+  },
   [TOOL_BROWSER_SCREENSHOT]: {
     icon: IconCamera,
+    label: "panels.tool.name.browserScreenshot",
     summary: (a) => arg(a, "format"),
   },
-  [TOOL_BROWSER_CLOSE]: { icon: IconWorld },
-  [TOOL_COMPUTER_SCREENSHOT]: { icon: IconDeviceDesktop },
-  [TOOL_COMPUTER_ACT]: { icon: IconMouse, summary: act },
+  [TOOL_BROWSER_CLOSE]: {
+    icon: IconWorld,
+    label: "panels.tool.name.browserClose",
+  },
+  [TOOL_COMPUTER_SCREENSHOT]: {
+    icon: IconDeviceDesktop,
+    label: "panels.tool.name.computerScreenshot",
+  },
+  [TOOL_COMPUTER_ACT]: {
+    icon: IconMouse,
+    label: "panels.tool.name.computerAct",
+    summary: act,
+  },
   [TOOL_COMPUTER_LIST_WINDOWS]: {
     icon: IconWindowMaximize,
+    label: "panels.tool.name.computerListWindows",
     summary: (a) => arg(a, "title_contains"),
   },
-  [TOOL_VM_SCREENSHOT]: { icon: IconDeviceDesktop },
-  [TOOL_VM_ACT]: { icon: IconMouse, summary: act },
+  [TOOL_VM_SCREENSHOT]: {
+    icon: IconDeviceDesktop,
+    label: "panels.tool.name.computerScreenshot",
+  },
+  [TOOL_VM_ACT]: {
+    icon: IconMouse,
+    label: "panels.tool.name.computerAct",
+    summary: act,
+  },
   [TOOL_VM_ASK_USER]: {
     icon: IconMessageQuestion,
+    label: "panels.tool.name.vmAskUser",
     summary: (a) => truncate(arg(a, "reason"), 50),
   },
-  [TOOL_ASK]: { icon: IconMessageQuestion, summary: askSummary },
-  [TOOL_TODO]: { icon: IconListCheck, summary: todoProgress },
+  [TOOL_ASK]: {
+    icon: IconMessageQuestion,
+    label: "panels.tool.name.ask",
+    summary: askSummary,
+  },
+  [TOOL_TODO]: {
+    icon: IconListCheck,
+    label: "panels.tool.name.todo",
+    summary: todoProgress,
+  },
   [TOOL_SEND_CHAT]: {
     icon: IconMessageCircle,
+    label: "panels.tool.name.sendChat",
     summary: (a) => truncate(arg(a, "text"), 50),
   },
-  [TOOL_SKILL]: { icon: IconSparkles, summary: (a) => arg(a, "name") },
-  [TOOL_HISTORY_SEARCH]: { icon: IconHistory, summary: query },
-  [TOOL_IDENTITY]: { icon: IconUser, summary: (a) => arg(a, "action") },
+  [TOOL_SKILL]: {
+    icon: IconBook,
+    label: "panels.tool.name.skill",
+    summary: (a) => arg(a, "name"),
+  },
+  [TOOL_HISTORY_SEARCH]: {
+    icon: IconHistory,
+    label: "panels.tool.name.historySearch",
+    summary: query,
+  },
+  [TOOL_IDENTITY]: {
+    icon: IconUser,
+    label: "panels.tool.name.identity",
+    summary: (a) => arg(a, "action"),
+  },
   [TOOL_TASK]: {
     icon: IconSubtask,
+    label: "panels.tool.name.task",
     summary: (a) => truncate(arg(a, "description") || arg(a, "prompt"), 50),
   },
   [TOOL_TASK_OUTPUT]: {
     icon: IconUsers,
+    label: "panels.tool.name.taskOutput",
     summary: (a, t) =>
       `${arg(a, "agent_id")}${
         a.wait === true ? t("panels.tool.taskWaitSuffix") : ""
@@ -223,20 +334,52 @@ const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
   },
   [TOOL_SEND_MESSAGE]: {
     icon: IconSend,
+    label: "panels.tool.name.sendMessage",
     summary: (a, t) =>
       t("panels.tool.sendTo", {
         to: arg(a, "to"),
         summary: truncate(arg(a, "summary"), 40),
       }),
   },
-  [TOOL_AGENT_CREATE]: { icon: IconUser, summary: (a) => arg(a, "name") },
-  [TOOL_ROUTINE_CREATE]: { icon: IconRepeat, summary: (a) => arg(a, "name") },
-  [TOOL_ROUTINE_LIST]: { icon: IconRepeat },
-  [TOOL_ROUTINE_UPDATE]: { icon: IconRepeat, summary: id },
-  [TOOL_ROUTINE_DELETE]: { icon: IconRepeat, summary: id },
-  [TOOL_ROUTINE_RUN]: { icon: IconRepeat, summary: id },
-  [TOOL_SEARCH]: { icon: IconSearch, summary: query },
-  [TOOL_CALL]: { icon: IconPlug, summary: (a) => arg(a, "name") },
+  [TOOL_AGENT_CREATE]: {
+    icon: IconUser,
+    label: "panels.tool.name.agentCreate",
+    summary: (a) => arg(a, "name"),
+  },
+  [TOOL_ROUTINE_CREATE]: {
+    icon: IconRepeat,
+    label: "panels.tool.name.routineCreate",
+    summary: (a) => arg(a, "name"),
+  },
+  [TOOL_ROUTINE_LIST]: {
+    icon: IconRepeat,
+    label: "panels.tool.name.routineList",
+  },
+  [TOOL_ROUTINE_UPDATE]: {
+    icon: IconRepeat,
+    label: "panels.tool.name.routineUpdate",
+    summary: id,
+  },
+  [TOOL_ROUTINE_DELETE]: {
+    icon: IconRepeat,
+    label: "panels.tool.name.routineDelete",
+    summary: id,
+  },
+  [TOOL_ROUTINE_RUN]: {
+    icon: IconRepeat,
+    label: "panels.tool.name.routineRun",
+    summary: id,
+  },
+  [TOOL_SEARCH]: {
+    icon: IconSearch,
+    label: "panels.tool.name.search",
+    summary: query,
+  },
+  [TOOL_CALL]: {
+    icon: IconPlug,
+    label: "panels.tool.name.call",
+    summary: (a) => arg(a, "name"),
+  },
 };
 
 function toolSummary(name: string, args: Args, t: Translate): string {
@@ -290,24 +433,26 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
       : "pending";
 
   const args = toolCall.arguments as Args;
+  const presentation = PRESENTATION[toolCall.name];
+  const label = presentation ? t(presentation.label) : toolCall.name;
   const summary = toolSummary(toolCall.name, args, t);
   const diffStat = toolDiffStat(toolCall.name, result);
-  const Icon = PRESENTATION[toolCall.name]?.icon ?? IconLoader;
+  const Icon = presentation?.icon ?? IconLoader;
 
   return (
     <div className="tool-timeline">
       <div className={`tool-line${open ? " open" : ""}`} {...triggerProps}>
         <span className="tool-line-chevron">
-          <IconChevronRight size={12} />
+          <IconChevronRight size={14} />
         </span>
         <span className="tool-line-icon">
           {state === "running" ? (
-            <IconLoader2 size={13} className="spin" />
+            <IconLoader2 size={14} className="spin" />
           ) : (
-            <Icon size={13} />
+            <Icon size={14} />
           )}
         </span>
-        <span className="tool-line-name">{toolCall.name}</span>
+        <span className="tool-line-name">{label}</span>
         {summary && (
           <>
             <span className="tool-line-sep">·</span>
@@ -325,7 +470,7 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
           </span>
         )}
         {state === "done" && (
-          <IconCheck size={12} className="tool-line-check" />
+          <IconCheck size={14} className="tool-line-check" />
         )}
         {state === "error" && (
           <span className="tool-line-error">{t("common.error")}</span>

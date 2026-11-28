@@ -20,7 +20,7 @@ export const setup = {
     en: "Step {current} of {total}",
   },
   "setup.next": { ja: "次へ", en: "Next" },
-  "setup.start": { ja: "はじめる", en: "Start" },
+  "setup.start": { ja: "完了", en: "Done" },
 
   // --- the desktop's gate: which server this window shows -------------------
   /** The first screen of the desktop app's setup. The local walk waits one
@@ -93,6 +93,12 @@ export const setup = {
     en: "{count} connected",
   },
   "setup.done.providersNone": { ja: "未接続", en: "None connected" },
+  /** Concrete first prompt so a first-time user does not stall between setup
+   * and the first conversation. */
+  "setup.done.firstStep": {
+    ja: "完了後は入力欄から「今日の予定を整理して」のように話しかけて使えます。",
+    en: 'After completing setup, start from the message box, such as "Organize my schedule for today".',
+  },
 
   /** The marker could not be written (a read-only config directory). The
    * wizard stays where it is, so the reason has to say what failed. */

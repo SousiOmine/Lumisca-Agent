@@ -28,13 +28,13 @@ import type { Translator } from "@lumisca/core/shared";
 import { buildSkillPrompt } from "@lumisca/core/skills/slash";
 import {
   IconArrowsMinimize,
+  IconBook,
   IconCode,
   IconFileDiff,
   IconGitBranch,
   IconGitCommit,
   IconListCheck,
   IconMessage,
-  IconSparkles,
 } from "@tabler/icons-preact";
 import type { ReactNode } from "preact/compat";
 import type { SkillInfo } from "./types.ts";
@@ -207,7 +207,7 @@ export function skillMenu(
       id: SKILL_COMMAND_ID,
       label: t("chat.slash.skill.label"),
       description: t("chat.slash.skill.description"),
-      icon: IconSparkles,
+      icon: IconBook,
       kind: "complete",
       items: skills.map((skill) => ({
         id: skill.name,

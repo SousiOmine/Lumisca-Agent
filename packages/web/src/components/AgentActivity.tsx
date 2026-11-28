@@ -17,6 +17,9 @@ interface AgentActivityProps {
   startedAt: number;
   endedAt?: number;
   running: boolean;
+  /** True while the turn is waiting for its first token or thinking before
+   * tool/text output arrives. */
+  thinking?: boolean;
   expanded: boolean;
   expandable: boolean;
   onToggle: () => void;
@@ -30,6 +33,7 @@ export function AgentActivity({
   startedAt,
   endedAt,
   running,
+  thinking = false,
   expanded,
   expandable,
   onToggle,
@@ -45,9 +49,12 @@ export function AgentActivity({
 
   const elapsed = Math.max(0, (endedAt ?? Date.now()) - startedAt);
   const time = formatElapsed(elapsed);
-  const label = running
-    ? t("panels.activity.working", { time })
-    : t("panels.activity.completed");
+  const showThinking = running && thinking;
+  const label = showThinking
+    ? t("panels.activity.thinking")
+    : running
+      ? t("panels.activity.working", { time })
+      : t("panels.activity.completed");
 
   return (
     <button
@@ -64,7 +71,9 @@ export function AgentActivity({
       ) : (
         <span className="agent-activity-spacer" />
       )}
-      <span>{label}</span>
+      <span className={showThinking ? "agent-activity-thinking" : undefined}>
+        {label}
+      </span>
     </button>
   );
 }

@@ -57,7 +57,7 @@ export function ComposerAttachments({
                   `${file.name} (${formatAttachmentSize(file.size)})`
                 }
               >
-                <IconFile size={13} stroke={1.5} />
+                <IconFile size={14} stroke={1.5} />
                 <span className="input-file-name">{file.name}</span>
                 <span className="input-file-size">
                   {file.status === "failed"
@@ -79,7 +79,7 @@ export function ComposerAttachments({
                   title={t("chat.composer.image.remove")}
                   onClick={() => onRemoveFile(file)}
                 >
-                  <IconX size={11} />
+                  <IconX size={14} />
                 </button>
               </span>
             );
@@ -105,7 +105,7 @@ export function ComposerAttachments({
                   onImagesChange?.(images.filter((_, i) => i !== index))
                 }
               >
-                <IconX size={12} />
+                <IconX size={14} />
               </button>
             </div>
           ))}

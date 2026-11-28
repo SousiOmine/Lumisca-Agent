@@ -15,15 +15,15 @@ import type { NotificationKind, NotificationStatus } from "../types.ts";
 export function notificationKindIcon(kind: NotificationKind) {
   switch (kind) {
     case "background":
-      return <IconTerminal2 size={13} />;
+      return <IconTerminal2 size={14} />;
     case "task":
-      return <IconSubtask size={13} />;
+      return <IconSubtask size={14} />;
     case "message":
-      return <IconSend size={13} />;
+      return <IconSend size={14} />;
     case "retry":
-      return <IconRefresh size={13} />;
+      return <IconRefresh size={14} />;
     case "notice":
-      return <IconRepeat size={13} />;
+      return <IconRepeat size={14} />;
   }
 }
 
@@ -64,13 +64,13 @@ export function SystemRow({
       >
         {expandable && (
           <span className="notification-line-chevron">
-            <IconChevronRight size={12} />
+            <IconChevronRight size={14} />
           </span>
         )}
         <span className="notification-line-icon">{icon}</span>
         <span className="notification-line-summary">{displayTitle(title)}</span>
         {status === "success" && (
-          <IconCheck size={12} className="notification-line-check" />
+          <IconCheck size={14} className="notification-line-check" />
         )}
         {status === "error" && (
           <span className="notification-line-error">{t("common.error")}</span>

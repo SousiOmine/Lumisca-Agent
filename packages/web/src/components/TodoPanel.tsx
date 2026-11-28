@@ -1,16 +1,26 @@
 import type { MessageKey } from "@lumisca/core/shared";
-import { IconListCheck } from "@tabler/icons-preact";
+import {
+  IconAlertTriangle,
+  IconCheck,
+  IconCircle,
+  IconListCheck,
+  IconMinus,
+  IconPlayerPlay,
+} from "@tabler/icons-preact";
+import type { ComponentType } from "preact/compat";
 import { useT } from "../i18n.ts";
 import type { TodoPhase, TodoStatus, TodoTask } from "../types.ts";
 import { CollapsiblePanel } from "./Panel.tsx";
 
-/** Marker glyph per status, mirroring the tool's text rendering. */
-const STATUS_MARKS: Record<TodoTask["status"], string> = {
-  pending: "○",
-  in_progress: "▶",
-  completed: "✓",
-  abandoned: "—",
-  blocked: "⚠",
+type IconComponent = ComponentType<{ size?: number }>;
+
+/** Line icon per status so mobile platforms never substitute color emoji. */
+const STATUS_ICONS: Record<TodoTask["status"], IconComponent> = {
+  pending: IconCircle,
+  in_progress: IconPlayerPlay,
+  completed: IconCheck,
+  abandoned: IconMinus,
+  blocked: IconAlertTriangle,
 };
 
 /** The tasks of a plan, in reading order. */
@@ -52,18 +62,21 @@ export function TodoPanel({ todos }: { todos: TodoPhase[] }) {
         <div key={phase.id} className="todo-phase">
           <div className="todo-phase-name">{phase.name}</div>
           <ul className="todo-tasks">
-            {phase.tasks.map((task) => (
-              <li
-                key={task.id}
-                className={`todo-task ${task.status}`}
-                title={statusLabel(t, task.status)}
-              >
-                <span className="todo-task-mark">
-                  {STATUS_MARKS[task.status]}
-                </span>
-                <span className="todo-task-name">{task.name}</span>
-              </li>
-            ))}
+            {phase.tasks.map((task) => {
+              const MarkIcon = STATUS_ICONS[task.status];
+              return (
+                <li
+                  key={task.id}
+                  className={`todo-task ${task.status}`}
+                  title={statusLabel(t, task.status)}
+                >
+                  <span className="todo-task-mark" aria-hidden="true">
+                    <MarkIcon size={14} />
+                  </span>
+                  <span className="todo-task-name">{task.name}</span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}

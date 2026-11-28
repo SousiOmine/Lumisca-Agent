@@ -295,6 +295,14 @@ export const chat = {
     ja: "エージェント一覧に戻る",
     en: "Back to the agents",
   },
+  "chat.stella.sidebar.hide": {
+    ja: "サイドバーを隠す",
+    en: "Hide sidebar",
+  },
+  "chat.stella.sidebar.show": {
+    ja: "サイドバーを表示",
+    en: "Show sidebar",
+  },
   /** An address named Lumisca on a server whose machine cannot run. The mode
    * is refused rather than shown degraded (see App.tsx): the sentence
    * explains why the reader landed on Lumisca code instead. */

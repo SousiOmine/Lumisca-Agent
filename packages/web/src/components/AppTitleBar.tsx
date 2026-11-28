@@ -59,6 +59,8 @@ interface StellaStripProps {
    * width and below): only then is there a way back to the list. */
   singleScreen: boolean;
   onBack: () => void;
+  onToggleSidebar?: () => void;
+  sidebarCollapsed?: boolean;
   onEditAgent: () => void;
   /** Show or hide the machine's screen, absent while there is nothing to
    * show. */
@@ -167,6 +169,12 @@ function StellaStrip({
             ? strip.onBack
             : undefined
         }
+        onToggleSidebar={
+          !strip.singleScreen && strip.agentId !== null
+            ? strip.onToggleSidebar
+            : undefined
+        }
+        sidebarCollapsed={strip.sidebarCollapsed}
         onEditAgent={strip.onEditAgent}
         onToggleScreen={strip.onToggleScreen}
         screenOpen={strip.screenOpen}
@@ -185,7 +193,7 @@ function StellaStrip({
           title={t("chat.stella.agents.new")}
           aria-label={t("chat.stella.agents.new")}
         >
-          <IconPlus size={15} />
+          <IconPlus size={16} />
         </button>
       )}
       {/* On desktop the app menu lives in the title bar's controls; in a

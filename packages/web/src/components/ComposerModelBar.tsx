@@ -94,7 +94,7 @@ export function ComposerModelBar({
             : t("chat.composer.modelSelect")}
         </span>
         <span className={`chevron${open ? " open" : ""}`}>
-          <IconChevronRight size={13} />
+          <IconChevronRight size={14} />
         </span>
       </button>
       {canThink && (

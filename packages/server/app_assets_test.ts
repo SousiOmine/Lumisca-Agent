@@ -398,7 +398,7 @@ test("the PWA surface is installable and never secret", async () => {
   };
   assertEquals(manifest.start_url, "/");
   assertEquals(manifest.display, "standalone");
-  assertEquals(manifest.theme_color, THEME_COLORS.dark);
+  assertEquals(manifest.theme_color, THEME_COLORS.light);
   assertEquals(manifest.icons?.length, 3);
 
   // Each icon it names is a real PNG at the size the manifest claims: a

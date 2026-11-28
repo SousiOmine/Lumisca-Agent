@@ -154,7 +154,7 @@ export function AgentMcpServers({ agentId }: AgentMcpServersProps) {
         onClick={reload}
         disabled={loading}
       >
-        <IconRefresh size={13} />
+        <IconRefresh size={14} />
         <span>{t("common.reload")}</span>
       </button>
     </div>

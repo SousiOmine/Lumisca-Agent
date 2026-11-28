@@ -1,10 +1,10 @@
-/* tokens.css — design tokens (dark + light theme variables).
+/* tokens.css — design tokens (light + dark theme variables).
  * Cascade position 1/15: order is defined by ../styles.css (@import order).
  * See ./README.md before adding new files.
  *
  * Three blocks: the theme-independent tokens in the bare `:root`, then the
- * two theme blocks. The dark block matches `:root` too (dark is the default
- * theme, so a document without data-theme is still themed), and the light
+ * two theme blocks. The light block matches `:root` too (light is the default
+ * theme, so a document without data-theme is still themed), and the dark
  * block comes last so it wins at equal specificity. Both theme blocks must
  * declare the same token names: a token that only one theme declares keeps
  * the other theme's value (../styles_test.ts guards this). */
@@ -64,7 +64,9 @@
 
 :root {
   --mono: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
-  --ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --ui:
+    -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Segoe UI Variable",
+    "Segoe UI", "Noto Sans JP", sans-serif;
 
   /* The type scale. Sizes are named by their pixel value on purpose: the
    * scale grew one label at a time, and a half step (12.5 beside 13) is a
@@ -149,7 +151,7 @@
    * component and derived from the agent's id (shared/agent-avatar.ts). It is
    * the ONE hue in the UI — everything else is the achromatic ramp — which is
    * what makes "who you are talking to" readable at a glance. The zero keeps
-   * the hsl() that reads it valid when nothing has set it. */
+   * the oklch()/hsl() that reads it valid when nothing has set it. */
   --agent-avatar-hue: 0;
   /* Heights of the two control pairs that sit side by side — the composer's
    * model pill and thinking dropdown, and the model settings row's two
@@ -227,13 +229,59 @@
   }
 }
 
-/* ---- theme: dark (default) ---------------------------------------------- */
+/* ---- theme: light (default) --------------------------------------------- */
 
 :root,
-html[data-theme="dark"] {
+html[data-theme="light"] {
   /* Tell the engine which scheme the app paints in: native widgets the app
    * does not style itself (the <select> popup, form controls, scrollbars)
    * then follow the app theme instead of the OS one. */
+  color-scheme: light;
+  /* Light is the "sheet on paper" theme: a faintly cool canvas, white
+   * faces. The ramp only ever darkens (surface > surface-2 > surface-3), so
+   * a nested row or a hover step reads as pressed into its parent instead
+   * of jumping brighter than it. */
+  --bg: #f4f5f9;
+  --surface: #ffffff;
+  --surface-2: #f5f6fa;
+  --surface-3: #eceef4;
+  --border: #e6e8f0;
+  --border-strong: #d0d3dd;
+  --text: #191920;
+  /* Both quiet steps clear WCAG AA (4.5:1) on every surface, accent-soft's
+   * row fill included: faint stays lighter than dim and clears 4.59:1 in the
+   * worst case. */
+  --text-dim: #52525e;
+  --text-faint: #62626f;
+  --accent: #191920;
+  --accent-hover: #2e2e38;
+  --accent-soft: rgba(25, 25, 32, 0.06);
+  --accent-dim: #52525e;
+  --ok: #107c10;
+  --error: #c42b1c;
+  --error-soft: rgba(196, 43, 28, 0.08);
+  /* A folder lent from the user's own computer (composer.css): 4.93:1 even
+   * on --surface-3 so the 11.5px line above the composer clears 4.5:1 on
+   * every surface. */
+  --share: #a84b06;
+  --share-soft: rgba(168, 75, 6, 0.1);
+  --shadow: rgba(20, 20, 40, 0.16);
+  --shadow-panel:
+    0 1px 2px rgba(23, 23, 42, 0.04), 0 24px 56px -30px rgba(23, 23, 42, 0.22);
+  --user-msg-bg: #eef0f5;
+  --input-bg: #ffffff;
+  --tab-active-bg: #ffffff;
+  --tab-active-text: #191920;
+  /* 4.59:1 on --tab-active-bg (#ffffff), so the close glyph stays legible. */
+  --tab-active-dim: rgba(25, 25, 32, 0.6);
+  --tab-active-hover: rgba(25, 25, 32, 0.07);
+  --tab-active-shadow: 0 2px 10px rgba(23, 23, 42, 0.14);
+  --toggle-knob: #ffffff;
+}
+
+/* ---- theme: dark -------------------------------------------------------- */
+
+html[data-theme="dark"] {
   color-scheme: dark;
   /* The canvas sits well below the faces: a near-black ground makes the
    * raised sheets and their large radii read as shapes instead of merging
@@ -245,18 +293,15 @@ html[data-theme="dark"] {
   --border: #26262f;
   --border-strong: #3b3b47;
   --text: #f3f3f7;
-  /* The two quiet steps of the ramp both clear WCAG AA (4.5:1) on every
-   * surface they are drawn on, accent-soft's row fill included — the worst
-   * case is surface-3 + accent-soft, 4.88 for faint. Faint therefore lands a
-   * hair under dim (1.02:1 between them, all but the same colour): anything
-   * lower (#9a9aa7) drops that worst case to 4.37 and fails, and raising dim
-   * instead would lighten every quiet label in the app to keep two steps
-   * apart. Faint still sits below dim in the ramp, which is what it is for. */
-  --text-dim: #a5a5b2;
+  /* Both quiet steps clear WCAG AA (4.5:1) on every surface, accent-soft's
+   * row fill included. Faint sits at the floor (4.88:1 in the worst case),
+   * while dim steps up to #bebec9 so the three-step text ramp stays distinct. */
+  --text-dim: #bebec9;
   --text-faint: #a3a3b2;
   --accent: #f3f3f7;
+  --accent-hover: #dcdce4;
   --accent-soft: rgba(255, 255, 255, 0.08);
-  --accent-dim: #a5a5b2;
+  --accent-dim: #bebec9;
   --ok: #5fd3a2;
   --error: #ff9a90;
   --error-soft: rgba(255, 154, 144, 0.12);
@@ -288,49 +333,4 @@ html[data-theme="dark"] {
    * --accent while on, so it inverts with the theme (a white knob would
    * disappear on the light accent of the dark theme) */
   --toggle-knob: #15151b;
-}
-
-/* ---- theme: light ------------------------------------------------------- */
-
-html[data-theme="light"] {
-  color-scheme: light;
-  /* Light is the "sheet on paper" theme: a faintly cool canvas, white
-   * faces. The ramp only ever darkens (surface > surface-2 > surface-3), so
-   * a nested row or a hover step reads as pressed into its parent instead
-   * of jumping brighter than it. */
-  --bg: #f4f5f9;
-  --surface: #ffffff;
-  --surface-2: #f5f6fa;
-  --surface-3: #eceef4;
-  --border: #e6e8f0;
-  --border-strong: #d0d3dd;
-  --text: #191920;
-  /* Same floor as the dark theme (4.5:1 on every surface, accent-soft's row
-   * fill included): the old #70707d fell to 3.73 on surface-3 + accent-soft.
-   * Faint stays lighter than dim here — that is what makes it the quieter of
-   * the two — and clears the floor at 4.59 in that worst case. */
-  --text-dim: #52525e;
-  --text-faint: #62626f;
-  --accent: #191920;
-  --accent-soft: rgba(25, 25, 32, 0.06);
-  --accent-dim: #52525e;
-  --ok: #107c10;
-  --error: #c42b1c;
-  --error-soft: rgba(196, 43, 28, 0.08);
-  /* Same fact as the dark theme's (tokens.css, the dark block). 5.0:1 on
-   * --surface and 4.6:1 on the canvas: the line is 11.5px, so it has to
-   * clear the 4.5 floor on both. */
-  --share: #b45309;
-  --share-soft: rgba(180, 83, 9, 0.1);
-  --shadow: rgba(20, 20, 40, 0.16);
-  --shadow-panel:
-    0 1px 2px rgba(23, 23, 42, 0.04), 0 24px 56px -30px rgba(23, 23, 42, 0.22);
-  --user-msg-bg: #eef0f5;
-  --input-bg: #ffffff;
-  --tab-active-bg: #ffffff;
-  --tab-active-text: #191920;
-  --tab-active-dim: rgba(25, 25, 32, 0.45);
-  --tab-active-hover: rgba(25, 25, 32, 0.07);
-  --tab-active-shadow: 0 2px 10px rgba(23, 23, 42, 0.14);
-  --toggle-knob: #ffffff;
 }

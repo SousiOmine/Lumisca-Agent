@@ -132,10 +132,10 @@
 .connection-picker-trigger {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: auto;
   max-width: 200px;
-  padding: 0 8px 0 10px;
+  padding: 0 8px 0 12px;
   font-size: var(--type-12);
   color: var(--text-dim);
 }
@@ -197,7 +197,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 8px;
   border-radius: var(--radius-sm);
   color: var(--text);
   font-size: var(--type-12-5);
@@ -248,7 +248,7 @@
 
 .connection-picker-note {
   margin: 0;
-  padding: 6px 8px;
+  padding: 8px 8px;
   font-size: var(--type-11-5);
   color: var(--text-faint);
 }
@@ -276,8 +276,8 @@
 .tab {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 6px 0 12px;
+  gap: 8px;
+  padding: 0 8px 0 12px;
   min-width: 104px;
   max-width: 200px;
   /* an invisible border keeps the box identical to the active card, so
@@ -378,7 +378,7 @@
 .app-menu {
   z-index: 50;
   min-width: 200px;
-  padding: 6px;
+  padding: 8px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -391,7 +391,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
   color: var(--text);
   font-size: var(--type-12-5);
@@ -412,7 +412,7 @@
 
 .app-menu-sep {
   height: 1px;
-  margin: 4px 6px;
+  margin: 4px 8px;
   background: var(--border);
 }
 
@@ -421,7 +421,7 @@
   position: fixed;
   z-index: 50;
   min-width: 200px;
-  padding: 6px;
+  padding: 8px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -434,7 +434,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
   color: var(--text);
   font-size: var(--type-12-5);
@@ -458,7 +458,7 @@
 
 .tab-context-sep {
   height: 1px;
-  margin: 4px 6px;
+  margin: 4px 8px;
   background: var(--border);
 }
 
@@ -477,7 +477,7 @@
   top: 0;
   left: calc(100% - 2px);
   min-width: 190px;
-  padding: 6px;
+  padding: 8px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -533,7 +533,7 @@
  * OS default, and four of them never fit next to tabs in a 360px window). */
 @media (max-width: 600px) {
   .tabbar {
-    gap: 3px;
+    gap: 4px;
     padding: 0 4px;
   }
 
@@ -579,7 +579,7 @@
 @media (max-width: 600px) {
   .tab {
     min-width: 92px;
-    padding: 0 6px 0 10px;
+    padding: 0 8px 0 12px;
     font-size: var(--type-13);
   }
 

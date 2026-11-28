@@ -3,10 +3,10 @@ import {
   IconCode,
   IconHistory,
   IconMenu2,
+  IconMessageCircle,
   IconPlus,
   IconPower,
   IconSettings,
-  IconSparkles,
 } from "@tabler/icons-preact";
 import { useRef, useState } from "preact/hooks";
 import { useCodeModeEnabled } from "../codeMode.ts";
@@ -129,7 +129,7 @@ export function AppMenu({
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <IconMenu2 size={17} />
+        <IconMenu2 size={16} />
       </button>
       {open && (
         <div
@@ -188,7 +188,11 @@ export function AppMenu({
                       onSwitchMode(entry.to);
                     }}
                   >
-                    {code ? <IconCode size={14} /> : <IconSparkles size={14} />}
+                    {code ? (
+                      <IconCode size={14} />
+                    ) : (
+                      <IconMessageCircle size={14} />
+                    )}
                     <span>
                       {t("chrome.appMenu.switchTo", {
                         mode: t(

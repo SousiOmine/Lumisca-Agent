@@ -60,6 +60,8 @@ export interface StellaModeScreenProps {
    * above this screen (see App.tsx). */
   screenOpen: boolean;
   onScreenOpenChange: (open: boolean) => void;
+  /** Whether the desktop agent sidebar is collapsed while reading a conversation. */
+  sidebarCollapsed?: boolean;
   searchOpen?: boolean;
   onSearchOpenChange?: (open: boolean) => void;
 }
@@ -80,6 +82,7 @@ export function StellaModeScreen({
   onOpenSettings,
   screenOpen,
   onScreenOpenChange,
+  sidebarCollapsed = false,
   searchOpen,
   onSearchOpenChange,
 }: StellaModeScreenProps) {
@@ -88,6 +91,7 @@ export function StellaModeScreen({
     <div
       className="stella-shell"
       data-screen={stella.activeAgentId === null ? "list" : "conversation"}
+      data-sidebar={sidebarCollapsed ? "collapsed" : undefined}
     >
       <StellaSidebar
         agents={stella.agents}

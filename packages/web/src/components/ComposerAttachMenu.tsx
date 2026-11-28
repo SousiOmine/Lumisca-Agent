@@ -76,7 +76,7 @@ export function ComposerAttachMenu({
         aria-label={label}
         onClick={() => setOpen((value) => !value)}
       >
-        <IconPlus size={15} />
+        <IconPlus size={16} />
       </button>
       {open && (
         <AttachMenuPanel

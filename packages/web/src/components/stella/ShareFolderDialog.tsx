@@ -260,7 +260,7 @@ export function ShareFolderDialog({
             disabled={busy}
             onClick={() => void choose()}
           >
-            <IconFolder size={15} />
+            <IconFolder size={16} />
             {t("chat.stella.share.pick")}
           </button>
 
@@ -312,7 +312,7 @@ export function ShareFolderDialog({
                       title={entry.path}
                       onClick={() => void lend(entry, () => close())}
                     >
-                      <IconFolder size={15} />
+                      <IconFolder size={16} />
                       <span className="stella-recent-name">{entry.name}</span>
                       <ShareTerms write={entry.write} />
                     </button>

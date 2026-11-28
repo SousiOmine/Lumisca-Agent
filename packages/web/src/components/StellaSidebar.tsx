@@ -468,7 +468,7 @@ export function StellaSidebar({
             title={t("chat.stella.agents.new")}
             aria-label={t("chat.stella.agents.new")}
           >
-            <IconPlus size={15} />
+            <IconPlus size={16} />
           </button>
         </div>
       )}
