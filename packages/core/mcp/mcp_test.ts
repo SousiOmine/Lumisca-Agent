@@ -3,6 +3,7 @@ import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import {
@@ -10,7 +11,7 @@ import {
   type SettingsRepo,
 } from "../settings/repo.ts";
 import type { McpServerConfig } from "../shared/mcp-config.ts";
-import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
+import { APP_MCP_SETTINGS_KEY, agentMcpSettingsKey } from "../shared/mod.ts";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import { McpCallTimeoutError, probeMcpServer } from "./client.ts";
 import {
@@ -923,4 +924,123 @@ test("removeAppServer refuses a name that is not configured", () => {
   const error = assertThrows(() => service.removeAppServer("nope"), CoreError);
   assertEquals(error.kind, "not_found");
   assert(settings.get(APP_MCP_SETTINGS_KEY)!.includes('"a"'));
+});
+
+// --- per-agent config -------------------------------------------------------
+
+function makeAgentEditService() {
+  const settings = createInMemorySettingsRepo();
+  const sessions = [{ id: "conv-a1", personaId: "a1" }] as SessionInfo[];
+  const service = new McpService({
+    settings,
+    listSessions: () => sessions,
+    agentMcpStatus: () => null,
+    requireWorkspace: () => {
+      throw new Error("not used");
+    },
+    applyMcpConfigChange: (_sessions, mutate) => mutate(),
+    refreshSessionMcp: () => {},
+  });
+  return { service, settings };
+}
+
+test("an agent's config is stored under its own key, not the app list", () => {
+  const { service, settings } = makeAgentEditService();
+  service.addAgentServer("a1", stdioServer("fs"));
+  const stored = settings.get(agentMcpSettingsKey("a1"));
+  assert(stored !== undefined && stored.includes('"fs"'), String(stored));
+  assertEquals(settings.get(APP_MCP_SETTINGS_KEY), undefined);
+  assertEquals(
+    service.getAgentMcpInfo("a1").servers.map((s) => s.name),
+    ["fs"],
+  );
+  // Another agent, and the app list, stay empty.
+  assertEquals(service.getAgentMcpInfo("a2").servers, []);
+  assertEquals(service.getAppMcpInfo().servers, []);
+});
+
+test("removing an agent's server keeps the others", () => {
+  const { service } = makeAgentEditService();
+  service.addAgentServer("a1", stdioServer("one"));
+  service.addAgentServer("a1", stdioServer("two"));
+  service.removeAgentServer("a1", "one");
+  assertEquals(
+    service.getAgentMcpInfo("a1").servers.map((s) => s.name),
+    ["two"],
+  );
+});
+
+test("an agent's view carries both lists and that conversation's statuses", () => {
+  const settings = createInMemorySettingsRepo();
+  settings.set(
+    APP_MCP_SETTINGS_KEY,
+    '{"mcpServers":{"github":{"url":"https://example.com/mcp"}}}',
+  );
+  const sessions = [{ id: "conv-a1", personaId: "a1" }] as SessionInfo[];
+  const service = new McpService({
+    settings,
+    listSessions: () => sessions,
+    // One session's live state, reported under both lists' names.
+    agentMcpStatus: (sessionId) =>
+      sessionId === "conv-a1"
+        ? [
+            {
+              name: "github",
+              type: "http",
+              enabled: true,
+              toolCount: 4,
+              status: "ok",
+            },
+            {
+              name: "own",
+              type: "stdio",
+              enabled: true,
+              toolCount: 2,
+              status: "ok",
+            },
+          ]
+        : null,
+    requireWorkspace: () => {
+      throw new Error("not used");
+    },
+    applyMcpConfigChange: (_sessions, mutate) => mutate(),
+    refreshSessionMcp: () => {},
+  });
+  service.addAgentServer("a1", stdioServer("own"));
+
+  const view = service.getAgentMcpView("a1");
+  assertEquals(
+    view.agent.servers.map((s) => s.name),
+    ["own"],
+  );
+  assertEquals(
+    view.global.servers.map((s) => s.name),
+    ["github"],
+  );
+  // The statuses are the conversation's, not every open session's.
+  assertEquals(view.agent.servers[0]!.toolCount, 2);
+  assertEquals(view.global.servers[0]!.toolCount, 4);
+  assertEquals(view.errors, []);
+});
+
+test("an agent's view reports a broken stored config instead of throwing", () => {
+  const settings = createInMemorySettingsRepo();
+  settings.set(agentMcpSettingsKey("a1"), "not json");
+  const service = new McpService({
+    settings,
+    listSessions: () => [],
+    agentMcpStatus: () => null,
+    requireWorkspace: () => {
+      throw new Error("not used");
+    },
+    applyMcpConfigChange: (_sessions, mutate) => mutate(),
+    refreshSessionMcp: () => {},
+  });
+  const view = service.getAgentMcpView("a1");
+  // The panel still renders: an unreadable list must not take the other one
+  // down with it.
+  assertEquals(view.agent.servers, []);
+  assertEquals(view.global.servers, []);
+  assertEquals(view.errors.length, 1);
+  assert(view.errors[0]!.length > 0);
 });

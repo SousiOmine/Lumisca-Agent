@@ -2,8 +2,14 @@ import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { resolveServerCwd } from "./config.ts";
+import {
+  type MachineRunner,
+  machineStdioCommand,
+  startMachineRelay,
+} from "./machine.ts";
 
 export interface McpToolInfo {
   name: string;
@@ -28,25 +34,76 @@ export interface McpTransportOptions {
    * ("sign in to this server"), where a provider would walk discovery and
    * registration only to end in an authorization nobody can finish. */
   authProvider?: OAuthClientProvider;
+  /** Run this server inside the agent's machine instead of here (see
+   * machine.ts). Absent for app-level servers, which run on the host. */
+  machine?: MachineRunner;
+}
+
+/** A built transport plus whatever it does not own. The machine relay's
+ * listener outlives the SDK transport object, so closing the connection has
+ * to close it too. */
+export interface McpTransportBundle {
+  transport: Transport;
+  dispose(): Promise<void>;
 }
 
 /** Build the SDK transport for a server config. Single home of the
  * stdio/HTTP selection so the session client, the sign-in flow and the
  * one-shot test probe connect exactly the same way. */
-export function createMcpTransport(
+export async function createMcpTransport(
   config: McpServerConfig,
   workspaceRoot: string,
   options: McpTransportOptions = {},
-): StdioClientTransport | StreamableHTTPClientTransport {
+): Promise<McpTransportBundle> {
+  const noDispose = async () => {};
+  // The machine may be asleep: its servers are started inside it, and a
+  // stopped container cannot exec. Waking happens once per connection.
+  await options.machine?.ready?.();
   if (config.type === "stdio") {
-    return new StdioClientTransport({
-      command: config.command!,
-      args: config.args,
-      env: config.env,
-      cwd: resolveServerCwd(config, workspaceRoot),
-    });
+    if (options.machine !== undefined) {
+      const spec = machineStdioCommand(options.machine, {
+        command: config.command!,
+        args: config.args,
+        env: config.env,
+        ...(config.cwd !== undefined ? { cwd: config.cwd } : {}),
+      });
+      // env is empty on purpose: the server's own variables travel to
+      // podman exec, and the host's environment must not be handed to a
+      // program that then runs as the agent's.
+      return {
+        transport: new StdioClientTransport({
+          command: spec.file,
+          args: spec.args,
+          env: {},
+          stderr: "ignore",
+        }),
+        dispose: noDispose,
+      };
+    }
+    return {
+      transport: new StdioClientTransport({
+        command: config.command!,
+        args: config.args,
+        env: config.env,
+        cwd: resolveServerCwd(config, workspaceRoot),
+      }),
+      dispose: noDispose,
+    };
   }
-  return createHttpTransport(config, options);
+  if (options.machine !== undefined) {
+    const relay = await startMachineRelay(
+      options.machine,
+      new URL(config.url!),
+    );
+    return {
+      transport: createHttpTransport(config, options, relay.url),
+      dispose: () => relay.close(),
+    };
+  }
+  return {
+    transport: createHttpTransport(config, options),
+    dispose: noDispose,
+  };
 }
 
 /** The HTTP transport alone. The sign-in flow needs this one specifically —
@@ -55,8 +112,11 @@ export function createMcpTransport(
 export function createHttpTransport(
   config: McpServerConfig,
   options: McpTransportOptions = {},
+  /** Where to connect, when it is not the configured URL itself (a machine
+   * server's loopback relay, see machine.ts). */
+  url: URL = new URL(config.url!),
 ): StreamableHTTPClientTransport {
-  return new StreamableHTTPClientTransport(new URL(config.url!), {
+  return new StreamableHTTPClientTransport(url, {
     // Configured headers ride in `requestInit`: the transport builds its
     // request headers from `requestInit.headers`, and an unknown top-level
     // `headers` option is silently ignored (the SDK has no such option).
@@ -161,10 +221,12 @@ function isMcpRequestTimeout(error: unknown): boolean {
  */
 export class McpServerClient {
   private readonly client: Client;
+  private readonly disposeTransport: () => Promise<void>;
   private closed = false;
 
-  private constructor(client: Client) {
+  private constructor(client: Client, disposeTransport: () => Promise<void>) {
     this.client = client;
+    this.disposeTransport = disposeTransport;
   }
 
   /** Spawn/connect and run the initialize handshake. `timeoutMs` bounds
@@ -175,10 +237,17 @@ export class McpServerClient {
     timeoutMs?: number,
     options?: McpTransportOptions,
   ): Promise<McpServerClient> {
-    const transport = createMcpTransport(config, workspaceRoot, options);
+    const built = await createMcpTransport(config, workspaceRoot, options);
     const client = new Client({ name: "lumisca", version: "0.1" });
-    await client.connect(transport, { timeout: timeoutMs });
-    return new McpServerClient(client);
+    try {
+      await client.connect(built.transport, { timeout: timeoutMs });
+    } catch (error) {
+      // A failed handshake leaves the relay listening; it must not outlive
+      // the attempt.
+      await closeQuietly(built.dispose);
+      throw error;
+    }
+    return new McpServerClient(client, built.dispose);
   }
 
   /** List the server's tools (pagination handled by the SDK). */
@@ -249,6 +318,7 @@ export class McpServerClient {
     } catch {
       // the server may already be gone
     }
+    await closeQuietly(this.disposeTransport);
   }
 }
 
@@ -299,7 +369,8 @@ export async function probeMcpServer(
   timeoutMs: number = MCP_TEST_TIMEOUT_MS,
   options?: McpTransportOptions,
 ): Promise<McpToolInfo[]> {
-  const transport = createMcpTransport(config, workspaceRoot, options);
+  const built = await createMcpTransport(config, workspaceRoot, options);
+  const transport = built.transport;
   // Installed before connect(): Protocol.connect chains whatever handler
   // the transport already carries, so this survives its own wiring.
   const closed = new Promise<void>((resolve) => {
@@ -320,5 +391,6 @@ export async function probeMcpServer(
     await closeQuietly(() => client.close());
     await closeQuietly(() => transport.close());
     await waitWithin(closed, TRANSPORT_CLOSE_TIMEOUT_MS);
+    await closeQuietly(built.dispose);
   }
 }

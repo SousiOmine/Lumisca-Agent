@@ -21,6 +21,22 @@ export interface McpServerInfo extends McpServerStatus {
   headers: Record<string, string>;
 }
 
+/** Both MCP lists as one stella conversation sees them.
+ *
+ * They travel as one answer because the conversation's effective list is the
+ * pair: the agent's own servers win a name collision, and a reader that had
+ * only one of the two could not say which server a name means here. */
+export interface AgentMcpView {
+  /** The agent's own servers, which run inside its machine. */
+  agent: McpInfo;
+  /** The app-level list, which runs on the host and is shared by every
+   * agent and every code-mode session. */
+  global: McpInfo;
+  /** Why a list could not be read, so the panel can say so instead of
+   * showing an empty list as if nothing were configured. */
+  errors: string[];
+}
+
 /** The MCP configuration surface for the settings UI and API. */
 export interface McpInfo {
   filePath: string;
@@ -41,6 +57,12 @@ export const MCP_CONFIG_FILE = ".mcp.json";
 
 /** Virtual file path used when parsing the app-level config. */
 export const APP_MCP_SOURCE = "app settings";
+
+/** Virtual file path used when parsing one agent's config. It names the
+ * settings key rather than a file, because this list has no file. */
+export function agentMcpSource(agentId: string): string {
+  return "agent settings " + agentId;
+}
 
 /** Virtual file path used when parsing the single server the settings UI
  * tests before saving it (see McpChecks.testServer). */

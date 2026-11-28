@@ -286,10 +286,12 @@ export type {
 } from "./settings-keys.ts";
 export {
   AGENT_IDENTITY_EDIT_KEY,
+  AGENT_MCP_SETTINGS_PREFIX,
   APP_MCP_SETTINGS_KEY,
   APP_UI_IN_SYSTEM_PROMPT_KEY,
   ASK_TOOL_ENABLED_KEY,
   agentIdentityEditEnabled,
+  agentMcpSettingsKey,
   appUiInSystemPrompt,
   askToolEnabled,
   CHATGPT_HOST_ID_KEY,

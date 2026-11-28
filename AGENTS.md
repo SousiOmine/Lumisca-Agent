@@ -257,6 +257,8 @@ Linux 上の rootless podman を前提とし、起動確認（`VM_PROBE_IMAGE`�
   テスト時は `LumiscaCore.forTesting` で `appSkillDirs: []` を渡しホスト環境から隔離します。
   サブエージェントには非対応ツールの組み込みスキルを除外して渡します（`packages/core/tools/tool-pieces.ts`、`packages/core/tools/subagent-spawn.ts`）。
 - **MCP サーバー管理ツール**：`mcp_add`、`mcp_remove`、`mcp_list`（`packages/core/mcp/manage-tools.ts`）は main レジストリのみに置きます。
+  stella の会話では 2 つの一覧を扱います。アプリ全体の一覧はホスト側で動く共有設定、エージェント専用の一覧はそのマシンの中で動く設定です。
+  `command` を持つサーバーはマシンに属するため必ず専用に入れ、`command` と `scope: "global"` の組み合わせは拒否します。`url` を持つサーバーは省略時にアプリ全体へ入り、`scope: "agent"` で専用になります。
   追加時は接続確認後（401 は要サインイン状態で保存）に設定 JSON の該当エントリだけを差し替え、他エントリの `${VAR}` 展開値を確定させないようにします。
 - **ChatGPT OAuth ログイン（`packages/core/models/chatgpt/`）**：サーバーと同一マシンのブラウザコールバック（`127.0.0.1`）のみ対応します。
   初回は動的クライアント登録を行い、`chatgpt.tokens.use.direct` スコープとモデル一覧取得を検証します。

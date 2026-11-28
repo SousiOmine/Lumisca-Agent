@@ -9,7 +9,7 @@ import type {
   StellaAgentSummary,
   ThinkingLevel,
 } from "../shared/mod.ts";
-import { translate } from "../shared/mod.ts";
+import { agentMcpSettingsKey, translate } from "../shared/mod.ts";
 import type { StellaAgent, StellaAgentRepo } from "../stella/agents.ts";
 import {
   DEFAULT_AGENT_NAME,
@@ -52,6 +52,9 @@ export class StellaAgentService {
       prepareAgentFolder(agentId: string): Promise<void>;
       /** Give back the machine a deleted agent held. */
       removeAgentMachine(agentId: string): Promise<void>;
+      /** The settings store, so a deleted agent's own MCP config (which may
+       * hold tokens) does not outlive it. */
+      settings: { delete(key: string): void };
       /** Stop the machine of an agent that was switched off. */
       stopAgentMachine(agentId: string): Promise<void>;
       modelExists(provider: string, modelId: string): boolean;
@@ -518,6 +521,9 @@ export class StellaAgentService {
     // The picture belongs to the agent: once the row is gone nothing can
     // name it, and the store's directory would outlive every reference.
     await this.deps.icons.deleteAgent(id);
+    // Its MCP config is per agent and may hold tokens; nothing can name it
+    // once the row is gone.
+    this.deps.settings.delete(agentMcpSettingsKey(id));
     await this.deps.removeAgentMachine(id);
   }
 

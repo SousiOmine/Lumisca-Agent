@@ -102,6 +102,9 @@ export const paths = {
    * choice about the agent — and because the editor reads it fresh rather than
    * trusting the row it was opened from. */
   stellaAgentIdentity: `${agent}/identity`,
+  /** One agent's own MCP servers: they run inside its machine. Read-only
+   * here: the agent's own tools are what change the list. */
+  stellaAgentMcp: `${agent}/mcp`,
   /** The routine list is read by agent id, and its handler reads
    * `agentId`, not the `id` the agent routes name. */
   stellaAgentRoutines: "/stella/agents/{agentId}/routines",

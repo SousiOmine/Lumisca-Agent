@@ -36,6 +36,7 @@ import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
 import type { EnvReader } from "../models/custom.ts";
 import { safeJsonParse } from "../shared/misc.ts";
 import {
+  AGENT_MCP_SETTINGS_PREFIX,
   APP_MCP_SETTINGS_KEY,
   COMPUTER_USE_SESSION_TOKEN_KEY,
   CONNECTIONS_KEY,
@@ -89,6 +90,7 @@ export function isSecretSettingsKey(key: string): boolean {
     key.startsWith(CREDENTIAL_KEY_PREFIX) ||
     key.startsWith(MCP_OAUTH_KEY_PREFIX) ||
     key === APP_MCP_SETTINGS_KEY ||
+    key.startsWith(AGENT_MCP_SETTINGS_PREFIX) ||
     key === WEB_SEARCH_KEY ||
     key === CONNECTIONS_KEY ||
     key === USER_PROVIDERS_KEY ||

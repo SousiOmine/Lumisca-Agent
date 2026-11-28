@@ -1,8 +1,15 @@
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
-import { CoreError } from "../errors.ts";
+import { CoreError, errorMessage } from "../errors.ts";
 import type { McpServerConfig } from "../shared/mcp-config.ts";
-import type { McpConfig, McpInfo } from "./config.ts";
+import {
+  type AgentMcpView,
+  agentMcpSource,
+  type McpConfig,
+  type McpInfo,
+} from "./config.ts";
+import type { MachineRunner } from "./machine.ts";
+import type { McpAdmin } from "./manage-tools.ts";
 import { McpOAuthStore } from "./oauth.ts";
 import type { McpAuthSnapshot } from "./oauth-session.ts";
 import { McpChecks, type McpTestResult } from "./service-checks.ts";
@@ -23,6 +30,10 @@ export interface McpServiceDeps extends McpConfigDeps {
    * the very store this service's sign-in writes (see mcp/oauth.ts);
    * created from `settings` when absent. */
   oauth?: McpOAuthStore;
+  /** How to run a process inside one agent's machine (see mcp/machine.ts).
+   * Absent where no machine exists: an agent's servers are then refused
+   * rather than run on the host. */
+  machineRunner?(agentId: string): MachineRunner | undefined;
 }
 
 /**
@@ -83,6 +94,88 @@ export class McpService {
     return this.setAppMcpConfig(this.config.removeAppServer(name));
   }
 
+  /**
+   * The mcp_add / mcp_remove / mcp_list surface of one stella conversation.
+   * It reaches both lists: the shared app-level config, which every agent
+   * and every code-mode session uses and which runs on the host, and the
+   * agent's own config, whose servers run inside its machine. The tools
+   * pick between them from the server's type and the caller's scope (see
+   * mcp/manage-tools.ts).
+   */
+  agentAdmin(agentId: string, machine: MachineRunner): McpAdmin {
+    return {
+      getAppMcpInfo: () => this.getAppMcpInfo(),
+      addAppServer: (server) => this.addAppServer(server),
+      removeAppServer: (name) => this.removeAppServer(name),
+      testServer: (text) => this.testServer(text),
+      getAgentMcpInfo: () => this.getAgentMcpInfo(agentId),
+      addAgentServer: (server) => this.addAgentServer(agentId, server),
+      removeAgentServer: (name) => this.removeAgentServer(agentId, name),
+      testAgentServer: (text) => this.testServer(text, undefined, machine),
+    };
+  }
+
+  /** One agent's MCP config: the servers that run inside its machine. */
+  getAgentMcpInfo(agentId: string): McpInfo {
+    return this.config.getAgentMcpInfo(agentId);
+  }
+
+  /** Both lists as one conversation sees them, for the information panel:
+   * the agent's own first, because its servers are the ones that override
+   * the shared ones of the same name in this conversation. */
+  getAgentMcpView(agentId: string): AgentMcpView {
+    return this.config.getAgentMcpView(agentId);
+  }
+
+  /** Replace one agent's config and bring that agent's conversation onto it
+   * (see McpConfigStore.setAgentMcpConfig). */
+  setAgentMcpConfig(agentId: string, text: string): McpInfo {
+    this.config.setAgentMcpConfig(agentId, text);
+    this.connections.dropCheckManager();
+    return this.getAgentMcpInfo(agentId);
+  }
+
+  /** The same surface for a session without an agent of its own: one list,
+   * whose servers run on the host. */
+  appAdmin(): McpAdmin {
+    return {
+      getAppMcpInfo: () => this.getAppMcpInfo(),
+      addAppServer: (server) => this.addAppServer(server),
+      removeAppServer: (name) => this.removeAppServer(name),
+      testServer: (text) => this.testServer(text),
+    };
+  }
+
+  /** Add one server to an agent's config. */
+  addAgentServer(agentId: string, server: McpServerConfig): McpInfo {
+    return this.setAgentMcpConfig(
+      agentId,
+      this.config.addAgentServer(agentId, server),
+    );
+  }
+
+  /** Remove one server from an agent's config by name. */
+  removeAgentServer(agentId: string, name: string): McpInfo {
+    return this.setAgentMcpConfig(
+      agentId,
+      this.config.removeAgentServer(agentId, name),
+    );
+  }
+
+  /** One agent's config for a session's merge. A broken stored config is
+   * collected as an error instead of thrown, so one bad source cannot stop
+   * the conversation from opening (the same rule as loadMergedConfig). */
+  loadAgentConfig(agentId: string): { config: McpConfig; errors: string[] } {
+    try {
+      return { config: this.config.loadAgentMcpConfig(agentId), errors: [] };
+    } catch (error) {
+      return {
+        config: { servers: [], filePath: agentMcpSource(agentId) },
+        errors: ["Agent MCP config error: " + errorMessage(error)],
+      };
+    }
+  }
+
   /** The workspace's own `.mcp.json` with live statuses from the
    * workspace's open sessions. Read fresh from disk each time, so external
    * edits are reflected here too. */
@@ -115,8 +208,12 @@ export class McpService {
    * "test" button): connect, list the tools, disconnect. Connection
    * failures come back as `{ ok: false, error }`; only the config text
    * itself is rejected with `invalid`. */
-  testServer(text: string, timeoutMs?: number): Promise<McpTestResult> {
-    return this.checks.testServer(text, timeoutMs);
+  testServer(
+    text: string,
+    timeoutMs?: number,
+    machine?: MachineRunner,
+  ): Promise<McpTestResult> {
+    return this.checks.testServer(text, timeoutMs, machine);
   }
 
   /**

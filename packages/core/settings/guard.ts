@@ -2,6 +2,7 @@ import { CoreError } from "../errors.ts";
 import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
 import {
   AGENT_IDENTITY_EDIT_KEY,
+  AGENT_MCP_SETTINGS_PREFIX,
   APP_MCP_SETTINGS_KEY,
   APP_UI_IN_SYSTEM_PROMPT_KEY,
   ASK_TOOL_ENABLED_KEY,
@@ -44,6 +45,10 @@ export function protectedKeyReason(key: string): string | undefined {
   }
   if (key === APP_MCP_SETTINGS_KEY) {
     // The app MCP config may contain secrets (env vars, headers).
+    return "MCP configuration cannot be accessed through this endpoint";
+  }
+  if (key.startsWith(AGENT_MCP_SETTINGS_PREFIX)) {
+    // One agent's MCP config has the same kinds of secret.
     return "MCP configuration cannot be accessed through this endpoint";
   }
   if (key === WEB_SEARCH_KEY) {

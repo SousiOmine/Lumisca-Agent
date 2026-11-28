@@ -1,5 +1,6 @@
 import { test } from "bun:test";
 import type {
+  AgentMcpView,
   McpAuthSnapshot,
   McpInfo,
   McpServerInfo,
@@ -65,6 +66,17 @@ class FakeMcpApi implements McpApi {
   testServer(text: string): Promise<McpTestResult> {
     this.tested = text;
     return Promise.resolve(this.testResult);
+  }
+  getAgentMcpView(agentId: string): AgentMcpView {
+    return {
+      agent: {
+        filePath: `agent ${agentId} settings`,
+        exists: false,
+        servers: [FakeMcpApi.server("own")],
+      },
+      global: this.getAppMcpInfo(),
+      errors: [],
+    };
   }
   startAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot> {
     this.authStarted = { text, redirectUri };
@@ -306,4 +318,37 @@ test("/mcp/oauth/callback finishes the sign-in and answers a page", async () => 
   // An unknown state (expired, forged or already finished) is a 404 page.
   const unknown = await app.request("/mcp/oauth/callback?code=abc&state=nope");
   assertEquals(unknown.status, 404);
+});
+
+test("an agent's MCP lists are read as one view and are read-only", async () => {
+  const fake = new FakeMcpApi();
+  const app = makeApp(fake);
+  fake.appText =
+    '{"mcpServers":{"shared":{"url":"https://example.com/mcp"}}}\n';
+
+  const get = await app.request("/stella/agents/a1/mcp");
+  assertEquals(get.status, 200);
+  const view = (await get.json()) as AgentMcpView;
+  // The agent's own list and the shared list travel together: a reader that
+  // had only one could not say which server a name means here.
+  assertEquals(
+    view.agent.servers.map((s) => s.name),
+    ["own"],
+  );
+  assertEquals(
+    view.global.servers.map((s) => s.name),
+    ["app"],
+  );
+
+  // Nothing writes through the route: the agent's own tools are the only
+  // way to change either list.
+  assertEquals(
+    (await app.request("/stella/agents/a1/mcp", { method: "PUT" })).status,
+    404,
+  );
+  assertEquals(
+    (await app.request("/stella/agents/a1/mcp/test", { method: "POST" }))
+      .status,
+    404,
+  );
 });

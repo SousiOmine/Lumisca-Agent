@@ -93,7 +93,11 @@ export {
 } from "./errors.ts";
 export { systemLanguageTags } from "./locale.ts";
 export { createLogger } from "./log.ts";
-export type { McpInfo, McpServerInfo } from "./mcp/config.ts";
+export type {
+  AgentMcpView,
+  McpInfo,
+  McpServerInfo,
+} from "./mcp/config.ts";
 export { MCP_OAUTH_CALLBACK_PATH } from "./mcp/oauth.ts";
 export type { McpAuthSnapshot, McpAuthStatus } from "./mcp/oauth-session.ts";
 export type { McpTestResult, McpTestTool } from "./mcp/service.ts";

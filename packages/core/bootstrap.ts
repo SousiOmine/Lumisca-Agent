@@ -15,6 +15,7 @@ import type { Api } from "./domain/model.ts";
 import type { SessionInfo } from "./domain/session.ts";
 import type { Workspace } from "./domain/workspace.ts";
 import { EventHub } from "./events/hub.ts";
+import type { MachineRunner } from "./mcp/machine.ts";
 import { McpOAuthStore } from "./mcp/oauth.ts";
 import { McpService } from "./mcp/service.ts";
 import type { EnvReader } from "./models/custom.ts";
@@ -64,6 +65,7 @@ import type { VmCommandBytesRunner, VmCommandRunner } from "./vm/command.ts";
 import { EnvRequestRegistry } from "./vm/env-request.ts";
 import { HandoverRegistry } from "./vm/handover-registry.ts";
 import { StellaMachine } from "./vm/machine.ts";
+import { vmMachineRunner } from "./vm/mcp-runner.ts";
 import type { StellaRuntime } from "./vm/runtime.ts";
 import {
   createWebSearchSettingsStore,
@@ -120,6 +122,9 @@ export interface CoreServicesDeps {
   modelService: ModelService;
   webSearch: WebSearchService;
   mcp: McpService;
+  /** For per-agent settings a service must remove with its owner (a
+   * deleted agent's MCP config). */
+  settings: SettingsRepo;
 
   decorateSession(session: SessionInfo): SessionInfo;
   emit(event: ClientEvent): void;
@@ -202,6 +207,7 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
     language: deps.language,
     emit: deps.emit,
     prepareAgentFolder: (agentId) => machines.prepareAgentFolder(agentId),
+    settings: deps.settings,
     removeAgentMachine: (agentId) => machines.removeAgentMachine(agentId),
     stopAgentMachine: (agentId) => machines.stopAgentMachine(agentId),
     modelExists: (provider, modelId) =>
@@ -565,11 +571,22 @@ export function createCoreGraph(
       // the pool references the service, the service references the pool
       // via the injected applyMcpConfigChange / agentMcpStatus below.
       loadMergedMcp: (workspace) => graph.mcp.loadMergedConfig(workspace),
+      // A stella conversation's own MCP servers: they run inside its
+      // machine, so the config is per agent and the process has to be
+      // started there.
+      loadAgentMcp: (agentId) => graph.mcp.loadAgentConfig(agentId),
+      machineRunner: (agentId) => mcpMachineRunner(graph.stella, agentId),
       // The agent's own MCP administration (mcp_add / mcp_remove /
       // mcp_list) goes through the same service the settings routes use, so
       // a change made from a conversation is applied exactly like one made
       // in Settings → MCP servers.
-      mcpAdmin: () => graph.mcp,
+      mcpAdmin: (agentId) =>
+        agentId === undefined
+          ? graph.mcp.appAdmin()
+          : graph.mcp.agentAdmin(
+              agentId,
+              mcpMachineRunner(graph.stella, agentId),
+            ),
       requireWorkspace: (id) => host.requireWorkspace(id),
       emit: (event) => host.emit(event),
       browser: () => host.browserBackend(),
@@ -594,6 +611,10 @@ export function createCoreGraph(
     new McpService({
       settings: graph.settings,
       oauth: graph.mcpOAuth,
+      // A stella agent's servers run in its own machine, so the same runner
+      // the session uses is what the settings test and the agent's own
+      // mcp_add connect through.
+      machineRunner: (agentId) => mcpMachineRunner(graph.stella, agentId),
       // Every session, stella's conversation included: a sign-in must
       // reconnect the conversation the user is talking to, and stella has one
       // row that `list()` hides because it is not a session in the UI.
@@ -630,6 +651,7 @@ export function createCoreGraph(
       deleteSession: (id) => host.deleteSession(id),
     });
   graph.services = createCoreServices({
+    settings: graph.settings,
     machine: graph.stella,
     agents: graph.stellaAgents,
     sessions: graph.sessions,
@@ -695,4 +717,19 @@ export function createCoreGraph(
     }
   });
   return graph;
+}
+
+/**
+ * How an agent's own MCP servers are started: inside its machine, after the
+ * machine is woken and its working folder exists. podman exec does not start
+ * a stopped container, and a missing --workdir fails the process.
+ */
+function mcpMachineRunner(
+  stella: StellaMachine,
+  agentId: string,
+): MachineRunner {
+  return vmMachineRunner(agentId, async () => {
+    await stella.ensureReady(agentId);
+    await stella.ensureAgentFolder(agentId);
+  });
 }

@@ -1,10 +1,12 @@
 import {
+  type AgentMcpView,
   type Locale,
   MCP_OAUTH_CALLBACK_PATH,
   type McpAuthSnapshot,
   type McpInfo,
   type McpTestResult,
 } from "@lumisca/core";
+import { paths, routePath } from "@lumisca/core/shared";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { renderMcpAuthPage } from "../render.ts";
@@ -20,6 +22,11 @@ export interface McpApi {
    * app-level config). */
   getMcpInfo(workspaceId: string): McpInfo;
   setMcpConfig(workspaceId: string, text: string): McpInfo;
+  /** One stella agent's MCP lists as its conversation sees them: its own
+   * servers, which run inside its machine, and the shared app-level list,
+   * which runs on the host. Read-only: the agent's own tools are the only
+   * way to change either list. */
+  getAgentMcpView(agentId: string): AgentMcpView;
   /** One-shot connection test of a single server config: connect, list the
    * tools, disconnect. Runs here because the server owns the child
    * processes a stdio server needs. Reaching the server is reported as a
@@ -114,6 +121,13 @@ export function mcpRoutes(
     const text = await c.req.text();
     requireNonEmptyString(text.trim(), "JSON body");
     return c.json(await core.testServer(text));
+  });
+
+  // One agent's MCP lists, read by its conversation's information panel.
+  // Read-only on purpose: the list belongs to the agent, and the agent's own
+  // mcp_add / mcp_remove are the only things that change it.
+  app.get(routePath(paths.stellaAgentMcp), (c) => {
+    return c.json(core.getAgentMcpView(c.req.param("id")));
   });
 
   // OAuth sign-in of one HTTP server: same single-server JSON body. The
