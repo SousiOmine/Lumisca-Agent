@@ -1,6 +1,7 @@
 import { IconChevronRight } from "@tabler/icons-preact";
 import { useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
+import { AgentMcpServers } from "./AgentMcpServers.tsx";
 import { AgentRoutines } from "./AgentRoutines.tsx";
 
 export interface AgentSettingsPanelProps {
@@ -14,19 +15,14 @@ export interface AgentSettingsPanelProps {
 }
 
 /**
- * The agent's settings inside the information panel.
+ * The agent's settings inside the information panel: its schedules and its
+ * MCP servers.
  *
- * A heading and one item so far. The heading is a group rather than a single
- * disclosure because the settings that follow it are per-agent items: MCP
- * servers are the next one, and they belong to the same agent as its
- * routines. Keeping the group here means the panel does not grow a second
- * shape when that item arrives.
- *
- * The routine body is mounted when the item opens. The settings pages keep
- * their disclosures mounted so they can animate closed; this one is read from
- * the server, and a closed section must not fetch an agent's routines every
- * time the panel is shown. The body therefore appears and disappears at once,
- * and a re-open re-reads the list, which is what a schedule wants anyway.
+ * Both items belong to the open agent, so they share one heading rather than
+ * each growing a section of its own. Each body is mounted when its item
+ * opens: the routines are read from the server and the MCP panel reads two
+ * config lists, and a closed item must fetch neither every time the panel is
+ * shown. A re-open re-reads, which is what both lists want anyway.
  */
 export function AgentSettingsPanel({
   agentId,
@@ -34,9 +30,11 @@ export function AgentSettingsPanel({
   defaultOpen = false,
 }: AgentSettingsPanelProps) {
   const t = useT();
-  const [open, setOpen] = useState(defaultOpen);
+  const [routinesOpen, setRoutinesOpen] = useState(defaultOpen);
+  const [mcpOpen, setMcpOpen] = useState(false);
   if (agentId === null) return null;
-  const label = t("chat.stella.agents.routines");
+  const routinesLabel = t("chat.stella.agents.routines");
+  const mcpLabel = t("chat.stella.agentMcp.title");
   return (
     <section
       className="stella-agent-settings"
@@ -48,27 +46,49 @@ export function AgentSettingsPanel({
       <button
         type="button"
         className="stella-settings-toggle"
-        aria-expanded={open}
-        aria-controls={open ? "stella-agent-routines" : undefined}
-        onClick={() => setOpen((previous) => !previous)}
+        aria-expanded={routinesOpen}
+        aria-controls={routinesOpen ? "stella-agent-routines" : undefined}
+        onClick={() => setRoutinesOpen((previous) => !previous)}
       >
         <span className="stella-settings-chevron" aria-hidden="true">
           <IconChevronRight size={14} />
         </span>
-        <span>{label}</span>
+        <span>{routinesLabel}</span>
       </button>
-      {open && (
+      {routinesOpen && (
         <div
           className="stella-settings-body"
           id="stella-agent-routines"
           role="region"
-          aria-label={label}
+          aria-label={routinesLabel}
         >
           <AgentRoutines
             agentId={agentId}
             agentDisabled={agentDisabled}
             compact
           />
+        </div>
+      )}
+      <button
+        type="button"
+        className="stella-settings-toggle"
+        aria-expanded={mcpOpen}
+        aria-controls={mcpOpen ? "stella-agent-mcp" : undefined}
+        onClick={() => setMcpOpen((previous) => !previous)}
+      >
+        <span className="stella-settings-chevron" aria-hidden="true">
+          <IconChevronRight size={14} />
+        </span>
+        <span>{mcpLabel}</span>
+      </button>
+      {mcpOpen && (
+        <div
+          className="stella-settings-body"
+          id="stella-agent-mcp"
+          role="region"
+          aria-label={mcpLabel}
+        >
+          <AgentMcpServers agentId={agentId} />
         </div>
       )}
     </section>

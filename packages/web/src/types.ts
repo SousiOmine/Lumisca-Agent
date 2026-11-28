@@ -13,6 +13,7 @@ import type { PendingQuestionLike } from "@lumisca/core/shared";
 
 /** Shared domain types; single source of truth in packages/core. */
 export type {
+  AgentMcpView,
   AgentMessage,
   AskAnswer,
   AskQuestion,

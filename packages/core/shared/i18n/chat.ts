@@ -572,6 +572,52 @@ export const chat = {
   /** The settings group at the bottom of the information panel. Its items
    * belong to the open agent, so this is not the app's settings dialog. */
   "chat.stella.agentSettings.title": { ja: "設定", en: "Settings" },
+  /** The agent's MCP servers in the information panel. The panel only
+   * reads both lists; the agent changes them from the conversation with its
+   * own tools. */
+  "chat.stella.agentMcp.title": { ja: "MCPサーバー", en: "MCP servers" },
+  "chat.stella.agentMcp.own": {
+    ja: "このエージェント専用",
+    en: "Only this agent",
+  },
+  "chat.stella.agentMcp.ownHint": {
+    ja: "このエージェントのマシンの中で動作します。",
+    en: "Runs inside this agent's machine.",
+  },
+  "chat.stella.agentMcp.global": {
+    ja: "全エージェント共通",
+    en: "Shared by all agents",
+  },
+  "chat.stella.agentMcp.globalHint": {
+    ja: "ホスト側で動作します。",
+    en: "Runs on the host.",
+  },
+  "chat.stella.agentMcp.empty": {
+    ja: "MCPサーバーはまだありません。会話でエージェントに頼むと追加できます。",
+    en: "No MCP servers yet. Ask the agent in the conversation to add one.",
+  },
+  "chat.stella.agentMcp.tools": {
+    ja: "{count}個のツール",
+    en: "{count} tools",
+  },
+  "chat.stella.agentMcp.notStarted": {
+    ja: "未接続",
+    en: "Not connected",
+  },
+  "chat.stella.agentMcp.failed": { ja: "失敗", en: "Failed" },
+  "chat.stella.agentMcp.needsAuth": {
+    ja: "サインインが必要",
+    en: "Needs sign-in",
+  },
+  "chat.stella.agentMcp.disabled": { ja: "無効", en: "Disabled" },
+  "chat.stella.agentMcp.hostSide": {
+    ja: "ホスト側",
+    en: "Host side",
+  },
+  "chat.stella.agentMcp.shadowed": {
+    ja: "同名の{count}件は、専用の設定が優先されます。",
+    en: "{count} shared server(s) of the same name are overridden here.",
+  },
   "chat.stella.share.open": {
     ja: "フォルダーで共同作業",
     en: "Share a folder",

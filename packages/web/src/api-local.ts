@@ -16,6 +16,7 @@ import {
 } from "./api-client.ts";
 import { conversationCalls, sessionFamily } from "./api-conversation.ts";
 import type {
+  AgentMcpView,
   BackgroundCommandInfo,
   CatalogStatus,
   FsBrowse,
@@ -482,6 +483,13 @@ export const api = {
       method: "POST",
       body: text,
     }),
+  /** One stella agent's MCP lists as its conversation sees them: its own
+   * servers, which run inside its machine, and the shared app-level list.
+   * Read-only: the agent's own tools change them. */
+  getAgentMcpView: (agentId: string) =>
+    request<AgentMcpView>(
+      "/api/stella/agents/" + encodeURIComponent(agentId) + "/mcp",
+    ),
   /** Start an OAuth sign-in for one HTTP server (the same single-server
    * config testMcpServer takes). Resolves once the flow waits for the
    * browser, so the caller can open `authorizationUrl` right away. */

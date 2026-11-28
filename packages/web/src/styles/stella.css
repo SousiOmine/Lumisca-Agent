@@ -1323,6 +1323,85 @@
   padding: 2px 10px 0;
 }
 
+/* --- stella: the agent's MCP servers in the information panel ------------ */
+
+/* Two lists, the agent's own first. Each row is a name and what the
+ * conversation knows about it: no control, because the agent is the only
+ * editor and this column only reports. */
+.stella-mcp {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 2px 6px;
+}
+
+.stella-mcp-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stella-mcp-heading {
+  margin: 0;
+  padding: 2px 0;
+  font-size: var(--type-11);
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.stella-mcp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stella-mcp-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.stella-mcp-name {
+  font-size: var(--type-12-5);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.stella-mcp-status {
+  font-size: var(--type-11);
+  color: var(--text-dim);
+}
+
+.stella-mcp-status-error {
+  color: var(--error);
+}
+
+.stella-mcp-note {
+  margin: 0;
+  font-size: var(--type-11);
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+
+.stella-mcp-note-error {
+  color: var(--error);
+}
+
+/* The refresh row keeps the toggle's hit area but not its chevron: it is an
+ * action, not another fold. */
+.stella-mcp-refresh {
+  padding: 3px 6px;
+  font-size: var(--type-11);
+  color: var(--text-dim);
+}
+
 .stella-share-list {
   list-style: none;
   margin: 0;

@@ -42,3 +42,11 @@ test("no agent draws no settings group", () => {
   // would be a row the reader cannot use.
   assertEquals(render(false, null), "");
 });
+
+test("the MCP item starts closed and reads neither list", () => {
+  // Both items are mounted by their disclosure: a closed MCP section must
+  // not fetch the two config lists every time the panel is shown.
+  const page = render(false);
+  assertStringIncludes(page, ">MCPサーバー<");
+  assertEquals(page.includes("stella-agent-mcp"), false);
+});
