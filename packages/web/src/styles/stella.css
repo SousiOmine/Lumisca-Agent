@@ -814,6 +814,19 @@
   line-height: 1.5;
 }
 
+/* The identity editor's field: it is the whole body of that dialog, so it
+ * takes the sheet's width and enough height to read the note without a
+ * scrollbar inside the field. `resize: vertical`, the same as every other
+ * text area here, leaves the width to the dialog. */
+.agent-identity-text {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 220px;
+  font-size: var(--type-12-5);
+  line-height: 1.6;
+  resize: vertical;
+}
+
 /* The file input is triggered by the dialog's button: a control with a
  * browser-local caption and no style of its own cannot sit in this row. */
 .agent-icon-input {

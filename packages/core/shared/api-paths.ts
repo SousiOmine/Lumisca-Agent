@@ -96,6 +96,12 @@ export const paths = {
   stellaAgentWake: `${agent}/wake`,
   stellaAgentTouch: `${agent}/touch`,
   stellaAgentIcon: `${agent}/icon/{name}`,
+  /** The agent's own text (`identity`): read by the editor when it opens, and
+   * replaced by it. A path of its own because it is a different act from the
+   * rename and picture beside it — the note the agent works from, not a
+   * choice about the agent — and because the editor reads it fresh rather than
+   * trusting the row it was opened from. */
+  stellaAgentIdentity: `${agent}/identity`,
   /** The routine list is read by agent id, and its handler reads
    * `agentId`, not the `id` the agent routes name. */
   stellaAgentRoutines: "/stella/agents/{agentId}/routines",

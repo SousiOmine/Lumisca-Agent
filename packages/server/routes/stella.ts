@@ -183,6 +183,36 @@ export function stellaRoutes(
     );
   });
 
+  /** The agent's own text, the identity: what it wrote about itself with the
+   * `identity` tool, read here so the editor can start from it.
+   *
+   * Read when the dialog opens rather than taken from the row it was opened
+   * from: the list is refreshed on its own schedule, and a save made from a
+   * stale copy would replace text the user never saw. Reading works for a
+   * switched-off agent, whose history stays readable. */
+  app.get(routePath(paths.stellaAgentIdentity), (c) => {
+    const agent = requireAgent(core, c.req.param("id"));
+    return c.json({ identity: agent.identity });
+  });
+
+  /** Replace the agent's own text, the identity.
+   *
+   * The user's edit of a field the agent normally writes: the experimental
+   * switch (settings → 実験的機能) only decides whether the row's menu offers
+   * the dialog, not whether this route answers. The request replaces the
+   * whole text — an omitted or empty `identity` clears it — because the
+   * editor shows the stored text and saves what is in its field. Trimming
+   * and the length limit are the core's (see the agent's `identity` tool,
+   * which follows the same rule), so a too-long text is a 400 rather than a
+   * silently shortened one.
+   *
+   * Answers the updated agent, the same shape the edit dialog's PATCH does. */
+  app.put(routePath(paths.stellaAgentIdentity), async (c) => {
+    const body = await parseBody<{ identity?: unknown }>(c);
+    const identity = optionalString(body?.identity, "identity");
+    return c.json(core.setStellaAgentIdentity(c.req.param("id"), identity));
+  });
+
   /** Delete an agent and its conversation. The client confirms first: the
    * transcript goes with it. */
   app.delete(routePath(paths.stellaAgent), async (c) => {

@@ -2,8 +2,9 @@ import { test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { CoreError } from "../errors.ts";
+import { MAX_AGENT_IDENTITY_CHARS } from "../shared/agent-limits.ts";
 import { toolText } from "../test-utils.ts";
-import { createStellaAgentRepo, MAX_AGENT_IDENTITY_CHARS } from "./agents.ts";
+import { createStellaAgentRepo } from "./agents.ts";
 import { createIdentityTool, type IdentityTarget } from "./identity.ts";
 
 /**

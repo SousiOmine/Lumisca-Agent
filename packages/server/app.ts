@@ -316,6 +316,8 @@ export function createApp(
           core.services.stellaAgents.createStellaAgent(input),
         updateStellaAgent: (id, patch) =>
           core.services.stellaAgents.updateStellaAgent(id, patch),
+        setStellaAgentIdentity: (id, content) =>
+          core.services.stellaAgents.setStellaAgentIdentity(id, content),
         deleteStellaAgent: (id) =>
           core.services.stellaAgents.deleteStellaAgent(id),
         getStellaStatus: () => core.services.stellaMachines.getStellaStatus(),

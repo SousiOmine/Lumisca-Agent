@@ -1,5 +1,9 @@
 import type { Translator } from "@lumisca/core/shared";
-import { errorMessage } from "@lumisca/core/shared";
+import {
+  AGENT_IDENTITY_EDIT_KEY,
+  agentIdentityEditEnabled,
+  errorMessage,
+} from "@lumisca/core/shared";
 import {
   IconChevronRight,
   IconPencil,
@@ -8,6 +12,7 @@ import {
   IconPlus,
   IconRepeat,
   IconTrash,
+  IconUser,
 } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
@@ -16,6 +21,7 @@ import { useArrivals } from "../hooks/useArrivals.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useCompactViewport } from "../hooks/useMediaQuery.ts";
 import { useLocale, useT } from "../i18n.ts";
+import { useSetting } from "../settingsStore.ts";
 import type {
   StellaAgent,
   StellaAgentSummary,
@@ -24,6 +30,7 @@ import type {
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { AgentAvatar } from "./stella/AgentAvatar.tsx";
 import { AgentEditDialog } from "./stella/AgentEditDialog.tsx";
+import { AgentIdentityDialog } from "./stella/AgentIdentityDialog.tsx";
 import { AgentRoutinesDialog } from "./stella/AgentRoutinesDialog.tsx";
 
 interface StellaSidebarProps {
@@ -50,6 +57,19 @@ interface StellaSidebarProps {
    * conversation's read-only notice flips the same switch, and the two must
    * take the row the server answered (see hooks/useStella). */
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>;
+}
+
+/** Whether a row's menu offers the identity editor, from the stored value of
+ * the experimental switch (settings → 実験的機能).
+ *
+ * The switch is the whole rule: it is off by default, and a reader who has
+ * not turned it on must not find a second writer of the text the agent owns
+ * beside the rename. Exported for the test that pins the gate — the menu is
+ * drawn only after a row is right-clicked, so the rendered list cannot show
+ * the item itself.
+ */
+export function identityEditingOffered(value: string | undefined): boolean {
+  return agentIdentityEditEnabled(() => value);
 }
 
 /** Where a row's menu is drawn, in viewport coordinates from the LEFT and
@@ -163,6 +183,18 @@ export function StellaSidebar({
    * dialog, which holds the installation's settings. */
   const [routinesFor, setRoutinesFor] = useState<StellaAgentSummary | null>(
     null,
+  );
+  /** The agent whose identity is open for editing, or null. Its own dialog
+   * rather than a field of the edit dialog: the identity is the agent's text,
+   * not the user's choice about the agent, and the experimental switch offers
+   * it on its own. */
+  const [identityFor, setIdentityFor] = useState<StellaAgentSummary | null>(
+    null,
+  );
+  /** The experimental switch (settings → 実験的機能). Off while the settings
+   * have not loaded, which is the switch's own default. */
+  const identityEdit = identityEditingOffered(
+    useSetting(AGENT_IDENTITY_EDIT_KEY),
   );
   const [error, setError] = useState<string | null>(null);
   /** Whether the fold of disabled agents is open. Closed by default: they
@@ -511,6 +543,23 @@ export function StellaSidebar({
             <IconPencil size={14} />
             <span>{t("common.edit")}</span>
           </button>
+          {/* Only while the experimental switch (settings → 実験的機能) is on:
+              the identity is the agent's own text, and the editor is the one
+              control that writes it as the user rather than as the agent. */}
+          {identityEdit && (
+            <button
+              type="button"
+              className="app-menu-item"
+              role="menuitem"
+              onClick={() => {
+                setIdentityFor(menu.agent);
+                setMenu(null);
+              }}
+            >
+              <IconUser size={14} />
+              <span>{t("chat.stella.agents.identity")}</span>
+            </button>
+          )}
           <button
             type="button"
             className="app-menu-item"
@@ -589,6 +638,12 @@ export function StellaSidebar({
         <AgentRoutinesDialog
           agent={routinesFor}
           onClose={() => setRoutinesFor(null)}
+        />
+      )}
+      {identityFor !== null && (
+        <AgentIdentityDialog
+          agent={identityFor}
+          onClose={() => setIdentityFor(null)}
         />
       )}
     </aside>

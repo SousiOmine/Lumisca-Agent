@@ -1,5 +1,6 @@
 import type { LumiscaDb } from "../db/mod.ts";
 import { CoreError } from "../errors.ts";
+import { MAX_AGENT_IDENTITY_CHARS } from "../shared/agent-limits.ts";
 import type { StellaAgentSummaryBase } from "../shared/stella-preview.ts";
 
 /**
@@ -95,10 +96,6 @@ export const MAX_AGENT_ROLE_CHARS = 20_000;
  * cannot be empty — but choosing it is not a decision worth blocking the
  * user on: an agent can be made first and named later, or never. */
 export const DEFAULT_AGENT_NAME = "Agent";
-/** The longest identity. It is read when the system prompt is generated and
- * carried by every request of that prompt, so it stays a short note rather
- * than a document. */
-export const MAX_AGENT_IDENTITY_CHARS = 4_000;
 
 export interface StellaAgentRepo {
   list(): StellaAgent[];

@@ -6,12 +6,12 @@ import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { CoreError } from "../errors.ts";
+import { MAX_AGENT_IDENTITY_CHARS } from "../shared/agent-limits.ts";
 import { HostFileBackend } from "../tools/host/files.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import {
   createStellaAgentRepo,
   DEFAULT_AGENT_NAME,
-  MAX_AGENT_IDENTITY_CHARS,
   MAX_AGENT_NAME_CHARS,
   MAX_AGENT_ROLE_CHARS,
   normalizeAgentInput,

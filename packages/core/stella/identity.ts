@@ -28,8 +28,8 @@ import {
   type Tool,
   type ToolResult,
 } from "../ports/tool.ts";
+import { MAX_AGENT_IDENTITY_CHARS } from "../shared/agent-limits.ts";
 import { TOOL_IDENTITY } from "../shared/mod.ts";
-import { MAX_AGENT_IDENTITY_CHARS } from "./agents.ts";
 
 /** What the tool needs of the agent row. A seam, so the tool is testable
  * without a database (the repo backs it in core.ts). */

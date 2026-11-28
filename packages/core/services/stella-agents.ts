@@ -173,6 +173,33 @@ export class StellaAgentService {
     return this.deps.agents.get(id);
   }
 
+  /**
+   * Replace the agent's own text, the identity.
+   *
+   * The one write the USER makes to it: the agent writes the same field with
+   * its `identity` tool, and the experimental switch in the settings only
+   * decides whether the client offers the editor. It stays out of
+   * `updateStellaAgent` because it is a different act — that patch moves what
+   * the user chose for the agent, this replaces the note the agent works
+   * from — and because the two must not share a failure: an identity one
+   * character too long must not roll back a rename sent with it.
+   *
+   * Trimmed and length-checked by the repository, so the agent's tool, the
+   * route and the dialog all follow one rule. An empty string clears it.
+   * Answers the row as stored, including the timestamp the write moved.
+   */
+  setStellaAgentIdentity(id: string, content: string): StellaAgent {
+    if (this.deps.agents.get(id) === undefined) {
+      throw new CoreError(`Agent not found: ${id}`, "not_found");
+    }
+    this.deps.agents.writeIdentity(id, content);
+    const stored = this.deps.agents.get(id);
+    if (stored === undefined) {
+      throw new CoreError(`Agent not found: ${id}`, "not_found");
+    }
+    return stored;
+  }
+
   /** Claim the right to start this agent's setup turn (see
    * StellaAgentRepo.markOnboarded): true for exactly one caller. */
   markOnboarded(id: string): boolean {

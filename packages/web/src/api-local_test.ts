@@ -548,6 +548,19 @@ const STELLA_CASES: Case[] = [
     path: "/api/stella/agents/a%201",
     call: () => api.deleteStellaAgent("a 1"),
   },
+  {
+    name: "getStellaAgentIdentity",
+    method: "GET",
+    path: "/api/stella/agents/a%201/identity",
+    call: () => api.getStellaAgentIdentity("a 1"),
+  },
+  {
+    name: "setStellaAgentIdentity",
+    method: "PUT",
+    path: "/api/stella/agents/a%201/identity",
+    call: () => api.setStellaAgentIdentity("a 1", "Who I am."),
+    body: JSON.stringify({ identity: "Who I am." }),
+  },
 ];
 
 test("api-local: workspace, skill and filesystem calls", () =>

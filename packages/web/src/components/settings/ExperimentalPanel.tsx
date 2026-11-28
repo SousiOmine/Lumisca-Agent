@@ -1,6 +1,8 @@
 import {
+  AGENT_IDENTITY_EDIT_KEY,
   APP_UI_IN_SYSTEM_PROMPT_KEY,
   ASK_TOOL_ENABLED_KEY,
+  agentIdentityEditEnabled,
   appUiInSystemPrompt,
   askToolEnabled,
   CODE_EXECUTION_ENABLED_KEY,
@@ -32,7 +34,9 @@ import { SettingsSection } from "./SettingsSection.tsx";
  * The code mode switch is the exception: it changes what the app OFFERS (the
  * menu's switch, the addresses that are screens), not how an agent is built,
  * so no session is rebuilt and the client applies it at once
- * (packages/web/src/codeMode.ts).
+ * (packages/web/src/codeMode.ts). The identity editor's switch follows the
+ * same rule for the same reason: it adds an item to an agent row's menu, and
+ * the row reads the setting from the shared store.
  *
  * The saved-prompt list is not here: it is a page of its own, drawn only while
  * code mode is offered (see SettingsModal). */
@@ -45,6 +49,9 @@ export function ExperimentalPanel() {
   // inversion stays here, and the value written is always "1" or "0".
   const [askDisabled, setAskDisabled] = useState(false);
   const [appUiInPrompt, setAppUiInPrompt] = useState(false);
+  /** Whether an agent row's menu offers the identity editor. Off until the
+   * stored value says otherwise, which is what the switch's default is. */
+  const [identityEdit, setIdentityEdit] = useState(false);
   // Code mode's switch is not read from the dialog's settings snapshot: the
   // answer has to exist before the first render (a bookmarked `/code` is
   // redirected on the way), so the server sends it with the page and this
@@ -54,12 +61,14 @@ export function ExperimentalPanel() {
   const codeModeSave = useSaveAction(errorMessage);
   const askSave = useSaveAction(errorMessage);
   const appUiSave = useSaveAction(errorMessage);
+  const identitySave = useSaveAction(errorMessage);
 
   useEffect(() => {
     if (!loaded) return;
     setCodeExecution(settings.values[CODE_EXECUTION_ENABLED_KEY] === "1");
     setAskDisabled(!askToolEnabled((key) => settings.values[key]));
     setAppUiInPrompt(appUiInSystemPrompt((key) => settings.values[key]));
+    setIdentityEdit(agentIdentityEditEnabled((key) => settings.values[key]));
   }, [loaded, settings.values]);
 
   const setCodeModeValue = (next: boolean) => {
@@ -92,6 +101,15 @@ export function ExperimentalPanel() {
     void appUiSave.save(
       () => settingsStore.set(APP_UI_IN_SYSTEM_PROMPT_KEY, next ? "1" : ""),
       () => setAppUiInPrompt(previous),
+    );
+  };
+
+  const setIdentityEditValue = (next: boolean) => {
+    const previous = identityEdit;
+    setIdentityEdit(next); // optimistic
+    void identitySave.save(
+      () => settingsStore.set(AGENT_IDENTITY_EDIT_KEY, next ? "1" : ""),
+      () => setIdentityEdit(previous),
     );
   };
 
@@ -175,6 +193,26 @@ export function ExperimentalPanel() {
           <div className="error-text">
             {t("settings.experimental.appUiPrompt.operationFailed", {
               error: appUiSave.error,
+            })}
+          </div>
+        )}
+
+        <SettingRow
+          label={t("settings.experimental.agentIdentity.title")}
+          description={t("settings.experimental.agentIdentity.description")}
+        >
+          <Toggle
+            checked={identityEdit}
+            disabled={identitySave.saving || !loaded}
+            onChange={setIdentityEditValue}
+            label={t("settings.experimental.agentIdentity.title")}
+          />
+        </SettingRow>
+
+        {identitySave.error && (
+          <div className="error-text">
+            {t("settings.experimental.agentIdentity.operationFailed", {
+              error: identitySave.error,
             })}
           </div>
         )}

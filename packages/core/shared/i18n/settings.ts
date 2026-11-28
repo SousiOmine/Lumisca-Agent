@@ -1033,6 +1033,21 @@ export const settings = {
     ja: "変更に失敗しました: {error}",
     en: "Failed to change: {error}",
   },
+  /** The switch that lets the user replace an agent's identity from the row
+   * menu. The identity is the agent's own note, so the editor is not another
+   * rename, and the switch keeps it out of a menu nobody asked to change. */
+  "settings.experimental.agentIdentity.title": {
+    ja: "エージェントのidentityを手動で編集",
+    en: "Edit an agent's identity by hand",
+  },
+  "settings.experimental.agentIdentity.description": {
+    ja: "エージェントの右クリックメニューにidentityの編集を追加します。",
+    en: "Adds an identity editor to an agent's right-click menu.",
+  },
+  "settings.experimental.agentIdentity.operationFailed": {
+    ja: "変更に失敗しました: {error}",
+    en: "Failed to change: {error}",
+  },
   "settings.mcp.toolCount": { ja: "{count}個のツール", en: "{count} tools" },
   "settings.provider.oauth": { ja: "OAuth連携", en: "OAuth" },
   /** Section heading of the AI providers inside the プロバイダー category

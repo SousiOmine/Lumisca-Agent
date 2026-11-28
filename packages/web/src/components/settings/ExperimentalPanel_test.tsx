@@ -24,6 +24,21 @@ test("the app UI prompt row says what it does and what it costs", () => {
   assertStringIncludes(panel, 'aria-label="生成UIの説明を常に含める"');
 });
 
+test("the identity editor row says where the control appears", () => {
+  const panel = html();
+  assertStringIncludes(panel, "エージェントのidentityを手動で編集");
+  // The switch's own position says whether it is on; the row names where the
+  // control appears instead of repeating that.
+  assertStringIncludes(
+    panel,
+    "右クリックメニューにidentityの編集を追加します。",
+  );
+  assertStringIncludes(
+    panel,
+    'aria-label="エージェントのidentityを手動で編集"',
+  );
+});
+
 test("the ask tool row is a label and its switch", () => {
   const panel = html();
   assertStringIncludes(panel, "askツールを無効化");

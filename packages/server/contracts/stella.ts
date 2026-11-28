@@ -57,6 +57,11 @@ export interface StellaApi {
       enabled?: boolean;
     },
   ): Promise<StellaAgent>;
+  /** Replace the agent's own text, the identity, with what the user typed in
+   * the row menu's editor. Trimming and the length limit are the core's, so
+   * the dialog and the agent's own `identity` tool share one rule. Answers
+   * the updated agent. */
+  setStellaAgentIdentity(id: string, content: string): StellaAgent;
   deleteStellaAgent(id: string): Promise<void>;
   getStellaStatus(): Promise<StellaStatus>;
   /** One agent's machine, as the screen pane draws it. */

@@ -129,6 +129,27 @@ export function appUiInSystemPrompt(
   return read(APP_UI_IN_SYSTEM_PROMPT_KEY) === "1";
 }
 
+/** Settings-table key for the experimental identity editor: the agent row's
+ * menu offers a dialog that reads and replaces the identity the agent wrote
+ * about itself. "1" offers it; unset (or any other value) keeps the menu as
+ * it was, because the identity is the agent's own note and a user who did not
+ * ask for the editor should not find it beside the rename.
+ *
+ * The flag gates the CLIENT's menu only: the route that writes the identity
+ * is mounted either way, and the agent's own `identity` tool is unaffected.
+ * Nothing rebuilds when it moves — no tool set and no prompt depends on it
+ * (unlike the ask and app-card switches). */
+export const AGENT_IDENTITY_EDIT_KEY = "agent_identity_edit_enabled";
+
+/** Whether the agent row's menu offers the identity editor. Follows the
+ * "1"-is-on convention of the other flags; anything else, unset included,
+ * is off. */
+export function agentIdentityEditEnabled(
+  read: (key: string) => string | undefined,
+): boolean {
+  return read(AGENT_IDENTITY_EDIT_KEY) === "1";
+}
+
 /** Settings-table key for the Wayland screen-sharing permission (the
  * portal's restore token). Machine state, not a secret: the token only lets
  * the portal skip its consent dialog for this user's own session, and it is

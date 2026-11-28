@@ -24,6 +24,7 @@ import { createAgentRepo } from "./session/agents.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
 import { createMessageRepo } from "./session/messages.ts";
 import type { WindowPage } from "./session/transcript-window.ts";
+import { MAX_AGENT_IDENTITY_CHARS } from "./shared/agent-limits.ts";
 import {
   DEFAULT_MODEL_KEY,
   STELLA_KEEP_FULL_LOG_KEY,
@@ -1862,6 +1863,59 @@ test("stella conversation: each agent's identity is its own", async () => {
     const prompt = core.services.sessions.getAgent(sessionB.id)!.agent.state
       .systemPrompt;
     assertEquals(prompt.includes("<identity>"), false);
+  } finally {
+    await core.close();
+  }
+});
+
+test("stella agent: the user's identity edit is trimmed, limited and clearable", async () => {
+  // The same rule the agent's own tool follows, reached from the row's menu:
+  // the repository trims and checks the length, so the dialog cannot store a
+  // note the tool would refuse.
+  const core = await stellaCore(RUNNING);
+  try {
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Ledger",
+      role: "r",
+    });
+    const saved = core.services.stellaAgents.setStellaAgentIdentity(
+      agent.id,
+      "  I keep the ledger and know where receipts go.  ",
+    );
+    assertEquals(
+      saved.identity,
+      "I keep the ledger and know where receipts go.",
+    );
+    // What the next generated prompt reads is the stored row, not the answer.
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(agent.id)?.identity,
+      saved.identity,
+    );
+
+    // One character over the limit is refused, and the stored text stays: a
+    // refused edit must not leave a half-written note behind.
+    assertThrows(() =>
+      core.services.stellaAgents.setStellaAgentIdentity(
+        agent.id,
+        "x".repeat(MAX_AGENT_IDENTITY_CHARS + 1),
+      ),
+    );
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(agent.id)?.identity,
+      saved.identity,
+    );
+
+    // An agent that is gone is a refusal, never a write for nobody.
+    assertThrows(
+      () => core.services.stellaAgents.setStellaAgentIdentity("nope", "x"),
+      CoreError,
+    );
+
+    // The empty string clears it: that is the dialog's "save an empty field".
+    assertEquals(
+      core.services.stellaAgents.setStellaAgentIdentity(agent.id, "").identity,
+      "",
+    );
   } finally {
     await core.close();
   }

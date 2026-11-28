@@ -97,6 +97,8 @@ const EXPECTED: Array<[method: string, template: string]> = [
   ["POST", paths.stellaAgentWake],
   ["POST", paths.stellaAgentTouch],
   ["GET", paths.stellaAgentIcon],
+  ["GET", paths.stellaAgentIdentity],
+  ["PUT", paths.stellaAgentIdentity],
   ["GET", paths.stellaAgentRoutines],
   ["PATCH", paths.routine],
   ["DELETE", paths.routine],

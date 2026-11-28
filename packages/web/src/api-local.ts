@@ -316,6 +316,23 @@ export const api = {
         body: JSON.stringify(patch),
       },
     ),
+  /** The agent's own text, the identity: what the row menu's editor loads
+   * before it shows anything. */
+  getStellaAgentIdentity: (id: string) =>
+    request<{ identity: string }>(
+      `/api${apiPathOf(paths.stellaAgentIdentity, { id: enc(id) })}`,
+    ),
+  /** Replace the agent's own text with what the user typed. The whole text
+   * travels: the editor shows the stored one and saves its field, and an
+   * empty string clears the identity. Answers the updated agent. */
+  setStellaAgentIdentity: (id: string, identity: string) =>
+    request<StellaAgent>(
+      `/api${apiPathOf(paths.stellaAgentIdentity, { id: enc(id) })}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ identity }),
+      },
+    ),
   deleteStellaAgent: (id: string) =>
     request<{ ok: boolean }>(
       `/api${apiPathOf(paths.stellaAgent, { id: enc(id) })}`,

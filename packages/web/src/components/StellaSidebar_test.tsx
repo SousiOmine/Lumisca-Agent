@@ -10,7 +10,7 @@ import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../i18n.ts";
 import type { StellaAgentSummary } from "../types.ts";
-import { StellaSidebar } from "./StellaSidebar.tsx";
+import { identityEditingOffered, StellaSidebar } from "./StellaSidebar.tsx";
 
 /** One row; `preview` says what its conversation last said (`null`: nothing
  * yet). */
@@ -122,6 +122,14 @@ test("StellaSidebar: the face is what identifies a row", () => {
   // its 22: that strip is one line tall).
   const html = render();
   assertStringIncludes(html, "width:40px;height:40px");
+});
+
+test("StellaSidebar: the identity editor is offered only by its switch", () => {
+  // The menu is drawn only after a row is right-clicked, so the rendered list
+  // cannot show the item; the gate is what decides whether it exists at all.
+  assertEquals(identityEditingOffered(undefined), false);
+  assertEquals(identityEditingOffered(""), false);
+  assertEquals(identityEditingOffered("1"), true);
 });
 
 test("StellaSidebar: the row itself is what opens its menu", () => {

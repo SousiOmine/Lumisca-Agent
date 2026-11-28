@@ -369,6 +369,41 @@ export const chat = {
    * schedule. Routines belong to one agent, so they open from that agent's
    * surfaces rather than from the app's settings. */
   "chat.stella.agents.routines": { ja: "ルーチン", en: "Routines" },
+  /** The row menu's item that opens the identity editor. It exists only
+   * while the experimental switch (settings → 実験的機能) is on, and "identity"
+   * keeps the agent's own word for the text it wrote about itself: the model
+   * sees that word in its tool, so a translation here would name the same
+   * field twice. */
+  "chat.stella.agents.identity": {
+    ja: "identityを編集",
+    en: "Edit identity",
+  },
+  "chat.stella.agents.identityTitle": {
+    ja: "「{name}」のidentity",
+    en: 'Identity of "{name}"',
+  },
+  /** The textarea's accessible name; the heading above it says the same. */
+  "chat.stella.agents.identityField": { ja: "identity", en: "Identity" },
+  /** What the field holds, and what saving an empty one does. */
+  "chat.stella.agents.identityHint": {
+    ja: "エージェントが自分について書いた文章です。役割や担当、仕事に必要な知識を書きます。空にして保存すると削除されます。",
+    en: "The text the agent wrote about itself: the role it takes, what it is responsible for, and the knowledge its work needs. Saving an empty field removes it.",
+  },
+  "chat.stella.agents.identityPlaceholder": {
+    ja: "エージェントはまだidentityを書いていません。",
+    en: "This agent has not written an identity yet.",
+  },
+  /** When a saved change reaches the conversation: the text is fixed in the
+   * system prompt when that prompt is generated, so the open conversation
+   * keeps the old one (the same rule the agent's own tool states). */
+  "chat.stella.agents.identityNote": {
+    ja: "保存した内容は、会話を開き直すか、履歴の圧縮のあとに反映されます。",
+    en: "A saved change reaches the conversation when it is reopened or after the history is compacted.",
+  },
+  "chat.stella.agents.identityLoadFailed": {
+    ja: "identityを読み込めませんでした: {error}",
+    en: "Could not read the identity: {error}",
+  },
   /** The row menu's switch. Off is a state of the agent, not of a session:
    * a disabled agent keeps its history readable and does nothing else. */
   "chat.stella.agents.disable": { ja: "無効化", en: "Disable" },
