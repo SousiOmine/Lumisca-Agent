@@ -27,14 +27,14 @@
     "@tabler/icons-preact": "3.53.0",
     "ai": "7.0.183",
     "esbuild": "0.28.2",
-    "hono": "4.13.21",
+    "hono": "4.13.23",
     "jose": "6.2.18",
     "katex": "0.19.1",
     "marked": "18.3.0",
     "motion": "14.14.0",
     "preact": "11.2.0",
     "sucrase": "3.35.1",
-    "unpdf": "2.2.1",
+    "unpdf": "2.2.3",
     "zod": "4.6.7"
   },
   "scripts": {
